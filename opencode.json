@@ -1,0 +1,43 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "twilio-docs": {
+      "type": "remote",
+      "url": "https://mcp.twilio.com/docs",
+      "enabled": true,
+      "oauth": false
+    },
+    "twilio-execute": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@twilio-alpha/mcp@0.6.0",
+        "${TWILIO_MCP_CREDS}"
+      ],
+      "enabled": false
+    }
+  },
+  "provider": {
+    "llamafile": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Gemma 4 E2B (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:8080/v1",
+        "reasoning": {
+          "enabled": false
+        }
+      },
+      "models": {
+        "gemma4-e2b": {
+          "name": "Gemma 4 E2B (local)",
+          "limit": {
+            "context": 4096,
+            "output": 2048
+          },
+          "tools": true
+        }
+      }
+    }
+  }
+}

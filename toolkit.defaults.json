@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "addons": {
+    "twilioSkills": true,
+    "docsMcp": true,
+    "executeMcp": false,
+    "devPhone": false,
+    "localGemma": true,
+    "builtInPi": true
+  }
+}

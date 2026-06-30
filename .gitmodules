@@ -1,0 +1,3 @@
+[submodule "vendor/twilio-ai"]
+	path = vendor/twilio-ai
+	url = https://github.com/twilio/ai.git

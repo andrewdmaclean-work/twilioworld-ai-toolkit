@@ -1,0 +1,25 @@
+{
+  "providers": {
+    "llamafile": {
+      "baseUrl": "http://127.0.0.1:8080/v1",
+      "api": "openai-completions",
+      "apiKey": "local",
+      "compat": {
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": false
+      },
+      "models": [
+        {
+          "id": "gemma4-e2b",
+          "name": "Gemma 4 E2B (local)",
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 4096,
+          "maxTokens": 2048
+        }
+      ]
+    }
+  }
+}

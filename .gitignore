@@ -1,0 +1,22 @@
+# Local AI model weights — downloaded by setup.sh, never committed (multi-GB)
+models/*.gguf
+models/*.tar.gz
+models/*.download
+models/*.log
+models/extract_tmp/
+# llamafile runtime binary — downloaded by setup.sh
+tools/llamafile
+tools/llamafile.exe
+
+# Secrets / local env
+.env
+.env.local
+.toolkit/config.json
+.toolkit/pi-agent/
+.pi/auth.json
+.pi/*cache*.json
+.pi/sessions/
+
+# OS noise
+.DS_Store
+models/system-prompt.txt
