@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 #
-# uninstall.sh — reverse everything setup.sh added to your system.
+# uninstall.sh — reverse everything the toolkit setup added to your system.
 #
 # Removes (with confirmation for each):
 #   • Dev Phone CLI plugin
 #   • Twilio CLI global npm package
-#   • gum (via brew)
 #   • the scoped API key this kit minted
 #   • ~/.agents/skills/ copy (BYO/Cursor/Codex path)
-#   • downloaded model + llamafile binary (in-repo)
+#   • downloaded model + llamafile/whisperfile binaries (in-repo)
 #
 # It does NOT log you out of the Twilio CLI or touch your account beyond the
 # one API key it created. Re-runnable.
@@ -51,29 +50,24 @@ if have twilio; then
   fi
 fi
 
-# 4. gum
-if have gum && have brew; then
-  if ask "Uninstall gum (brew uninstall gum)?"; then
-    brew uninstall gum >/dev/null 2>&1 && ok "gum removed" || warn "removal failed"
-  fi
-fi
-
-# 5. Global skills copy
+# 4. Global skills copy
 if [[ -d "$HOME/.agents/skills" ]]; then
   if ask "Remove copied skills from ~/.agents/skills/?"; then
     rm -rf "$HOME/.agents/skills" && ok "removed \$HOME/.agents/skills/" || warn "removal failed"
   fi
 fi
 
-# 6. In-repo model + runtime
+# 5. In-repo model + runtime
 if [[ -f "$ROOT/models/gemma4-e2b.gguf" || -e "$ROOT/tools/llamafile" \
-   || -f "$ROOT/models/gemma4-e2b.download" || -f "$ROOT/models/gemma4-e2b-mmproj.gguf" ]]; then
-  if ask "Delete the downloaded model + archive + llamafile binary in this repo?"; then
+   || -f "$ROOT/models/gemma4-e2b.download" || -f "$ROOT/models/gemma4-e2b-mmproj.gguf" \
+   || -f "$ROOT/models/whisper-tiny.en-q5_1.bin" || -e "$ROOT/tools/whisperfile" ]]; then
+  if ask "Delete downloaded local AI runtimes and model files in this repo?"; then
     rm -f "$ROOT/models/gemma4-e2b.gguf" "$ROOT/models/gemma4-e2b-mmproj.gguf" \
-          "$ROOT/models/gemma4-e2b.download" \
+          "$ROOT/models/gemma4-e2b.download" "$ROOT/models/whisper-tiny.en-q5_1.bin" \
           "$ROOT/tools/llamafile" "$ROOT/tools/llamafile.exe" \
+          "$ROOT/tools/whisperfile" "$ROOT/tools/whisperfile.exe" \
       && ok "local model files removed" || warn "removal failed"
-    rm -rf "$ROOT/models/extract_tmp"
+    rm -rf "$ROOT/models/extract_tmp" "$ROOT/models/voice"
   fi
 fi
 

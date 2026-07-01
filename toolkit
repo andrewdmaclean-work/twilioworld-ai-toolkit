@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+#
+# toolkit — TwilioWorld AI Toolkit entry point.
+# Bootstraps bun if needed, then launches the TUI.
+#
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if ! command -v bun >/dev/null 2>&1; then
+  echo "Installing bun (needed for the TUI)..."
+  if command -v brew >/dev/null 2>&1; then
+    brew install bun || { echo "brew install bun failed. Install manually: https://bun.sh"; exit 1; }
+  else
+    curl -fsSL https://bun.sh/install | bash || { echo "bun install failed. Install manually: https://bun.sh"; exit 1; }
+  fi
+fi
+
+cd "$ROOT/tui"
+[[ -d node_modules ]] || bun install
+
+if [[ "${TOOLKIT_TUI_SMOKE:-}" != "1" ]]; then
+  if ! command -v node >/dev/null 2>&1; then
+    echo "TwilioWorld AI Toolkit requires Node >= 22.19.0 on PATH." >&2
+    echo "Node was not found. Install Node 22 and re-run: nvm install 22 && nvm use 22" >&2
+    exit 2
+  fi
+  NODE_VERSION="$(node --version | sed 's/^v//')"
+  NODE_MAJOR="${NODE_VERSION%%.*}"
+  NODE_REST="${NODE_VERSION#*.}"
+  NODE_MINOR="${NODE_REST%%.*}"
+  if (( NODE_MAJOR < 22 || (NODE_MAJOR == 22 && NODE_MINOR < 19) )); then
+    echo "TwilioWorld AI Toolkit requires Node >= 22.19.0 on PATH." >&2
+    echo "Current node is v${NODE_VERSION}. Run: nvm install 22 && nvm use 22" >&2
+    exit 2
+  fi
+fi
+
+exec bun run src/index.ts "$@"

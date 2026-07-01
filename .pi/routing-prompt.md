@@ -1,4 +1,5 @@
 Twilio routing rule:
+- Do not expose chain-of-thought, hidden reasoning, `<think>` blocks, or internal deliberation. Give concise final answers only.
 - For Twilio-specific answers, use only knowledge from loaded Twilio Skills or Twilio Docs MCP results.
 - Do not answer Twilio product/API/setup facts from general model knowledge.
 - For Twilio product, API, setup, or troubleshooting questions, first check whether a loaded Twilio Skill exactly matches the requested product or workflow.
@@ -12,9 +13,9 @@ Twilio routing rule:
 - When no Skill was used, say `Skills used: none`.
 
 Pi MCP call rule:
-- Prefer direct Docs MCP tools when available: call `twilio_docs_twilio__search` and `twilio_docs_twilio__retrieve` as normal tools.
+- Prefer direct Docs MCP tools when available: call `twilio__search` and `twilio__retrieve` as normal tools.
 - If direct tools are not available and only the `mcp` proxy exists, first connect with `mcp({ connect: "twilio-docs" })` if needed.
 - `mcp({ search: "twilio sync" })` searches MCP tool names/descriptions only. It is not a Twilio docs search and is not enough to answer.
 - To run a Twilio docs search through the proxy, call:
-  `mcp({ tool: "twilio_docs_twilio__search", args: "{\"query\":\"twilio sync\",\"source\":\"docs\",\"product\":\"sync\"}" })`
+  `mcp({ tool: "twilio__search", args: "{\"query\":\"twilio sync\",\"source\":\"docs\",\"product\":\"sync\"}" })`
 - Do not call the proxy as `mcp({ query: "...", source: "docs" })`; that is not a valid adapter call and will not execute the docs search tool.

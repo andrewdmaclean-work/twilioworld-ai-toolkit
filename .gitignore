@@ -1,12 +1,16 @@
-# Local AI model weights — downloaded by setup.sh, never committed (multi-GB)
+# Local AI model weights — downloaded by toolkit setup, never committed (multi-GB)
 models/*.gguf
+models/*.bin
 models/*.tar.gz
 models/*.download
 models/*.log
 models/extract_tmp/
-# llamafile runtime binary — downloaded by setup.sh
+models/voice/
+# llamafile runtime binary — downloaded by toolkit setup
 tools/llamafile
 tools/llamafile.exe
+tools/whisperfile
+tools/whisperfile.exe
 
 # Secrets / local env
 .env
@@ -20,3 +24,8 @@ tools/llamafile.exe
 # OS noise
 .DS_Store
 models/system-prompt.txt
+
+# OpenTUI dashboard prototype (tui/) — Bun-managed
+tui/node_modules/
+tui/bun.lock
+tui/bun.lockb
