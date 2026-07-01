@@ -1,5 +1,16 @@
 # TwilioWorld AI Toolkit
 
+> **🚀 Try the new terminal UI (in progress):** there's a full interactive TUI
+> version of this toolkit — in-app chat with a local model, one-menu agent
+> setup for Pi/OpenCode/Claude Code/Cursor/Codex, Dev Phone, and more — on the
+> [`opentui-prototype`](../../tree/opentui-prototype) branch. To try it:
+> ```bash
+> git clone --recursive -b opentui-prototype <this-repo-url>
+> cd twilioworld-ai-toolkit
+> ./toolkit
+> ```
+> The instructions below are for the current `main` (shell-script) version.
+
 Arm your AI coding agent with deep Twilio expertise — Skills, live Docs MCP, and
 optional real API execution — out of the box. Clone it, run one script, choose your
 add-ons, and your agent is ready to build and run real Twilio things with no hunting
