@@ -6,6 +6,6 @@
     "executeMcp": false,
     "devPhone": false,
     "localGemma": true,
-    "builtInPi": true
+    "voiceInput": false
   }
 }

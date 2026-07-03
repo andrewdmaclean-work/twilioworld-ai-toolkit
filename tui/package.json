@@ -1,0 +1,17 @@
+{
+  "name": "twilioworld-toolkit-tui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "OpenTUI dashboard for the TwilioWorld AI Toolkit.",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch run src/index.ts"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.4.2"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

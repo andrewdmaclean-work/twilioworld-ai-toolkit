@@ -32,8 +32,8 @@
         "gemma4-e2b": {
           "name": "Gemma 4 E2B (local)",
           "limit": {
-            "context": 4096,
-            "output": 2048
+            "context": 32768,
+            "output": 4096
           },
           "tools": true
         }
