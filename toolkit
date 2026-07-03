@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# toolkit — TwilioWorld AI Toolkit entry point.
+# toolkit — TwilioWorld Agentic Coding Toolkit entry point.
 # Bootstraps bun if needed, then launches the TUI.
 #
 set -euo pipefail
@@ -12,7 +12,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # can no longer touch. index.ts checks this again once the TUI itself
 # starts, but that's after bun/bun-install may already have run as root.
 if [[ "${TOOLKIT_TUI_SMOKE:-}" != "1" && "${EUID:-$(id -u)}" -eq 0 ]]; then
-  echo "TwilioWorld AI Toolkit should not be run as root." >&2
+  echo "TwilioWorld Agentic Coding Toolkit should not be run as root." >&2
   echo "Re-run ./toolkit as your normal user — sudo here would root-own your model files and config." >&2
   exit 2
 fi
@@ -31,7 +31,7 @@ cd "$ROOT/tui"
 
 if [[ "${TOOLKIT_TUI_SMOKE:-}" != "1" ]]; then
   if ! command -v node >/dev/null 2>&1; then
-    echo "TwilioWorld AI Toolkit requires Node >= 22.19.0 on PATH." >&2
+    echo "TwilioWorld Agentic Coding Toolkit requires Node >= 22.19.0 on PATH." >&2
     echo "Node was not found. Install Node 22 and re-run: nvm install 22 && nvm use 22" >&2
     exit 2
   fi
@@ -40,7 +40,7 @@ if [[ "${TOOLKIT_TUI_SMOKE:-}" != "1" ]]; then
   NODE_REST="${NODE_VERSION#*.}"
   NODE_MINOR="${NODE_REST%%.*}"
   if (( NODE_MAJOR < 22 || (NODE_MAJOR == 22 && NODE_MINOR < 19) )); then
-    echo "TwilioWorld AI Toolkit requires Node >= 22.19.0 on PATH." >&2
+    echo "TwilioWorld Agentic Coding Toolkit requires Node >= 22.19.0 on PATH." >&2
     echo "Current node is v${NODE_VERSION}. Run: nvm install 22 && nvm use 22" >&2
     exit 2
   fi

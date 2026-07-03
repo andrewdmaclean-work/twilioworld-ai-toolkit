@@ -36,7 +36,7 @@ export function buildRouteChrome(renderer: CliRenderer, opts: RouteChromeOptions
     id: `${opts.id}-header`,
     borderStyle: "double",
     borderColor: THEME.red,
-    title: " TwilioWorld AI Toolkit ",
+    title: " TwilioWorld Agentic Coding Toolkit ",
     titleColor: THEME.white,
     paddingX: 1,
     flexDirection: "column",

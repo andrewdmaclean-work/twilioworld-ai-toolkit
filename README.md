@@ -32,24 +32,37 @@ cd twilioworld-agentic-coding-toolkit
 > Use `--recursive` so the Twilio Skills submodule comes down with the clone.
 > Forgot it? Setup (in the menu) runs `git submodule update --init` for you.
 
-`./toolkit` is the command you use from the repo root. Arrow keys to navigate:
+`./toolkit` is the command you use from the repo root. Arrow keys to navigate.
+The dashboard is a two-column OpenTUI app: actions on the left, status and
+selected-action details on the right.
 
-```
-╔══════════════════════════════════════════════╗
-║  TwilioWorld Agentic Coding Toolkit          ║
-╚══════════════════════════════════════════════╝
+```text
+╔════════════════════════════════════════════════════════════════════════════╗
+║ TwilioWorld Agentic Coding Toolkit                                        ║
+║                                                                            ║
+║ TwilioWorld                                                                ║
+║ Agentic Coding Toolkit                                                     ║
+║ model missing  |  Twilio primary                                           ║
+║ Next: Run Setup to download the local Gemma model and llamafile runtime.   ║
+╚════════════════════════════════════════════════════════════════════════════╝
 
-  Install choices  Local chat model, Agent Skills, Agent Docs MCP
+┌ Actions ───────────────────────┐ ┌ Install Choices ───────────────────────┐
+│ ▶ Setup                         │ │ Install choices  Local chat model,     │
+│   Configure agent               │ │ Agent Skills, Agent Docs MCP           │
+│   Sign up for TwilioWorld       │ └────────────────────────────────────────┘
+│   Uninstall                     │ ┌ Active ────────────────────────────────┐
+│   Exit                          │ │   ·  No running toolkit services.      │
+└─────────────────────────────────┘ └────────────────────────────────────────┘
+                                  ┌ Selected Action ────────────────────────┐
+                                  │ Purpose                                  │
+                                  │   Choose what to install locally and     │
+                                  │   what to wire into coding agents.       │
+                                  │                                          │
+                                  │ Network installs/downloads happen only   │
+                                  │ after the confirmation step.             │
+                                  └──────────────────────────────────────────┘
 
-  Active
-    ·  No running toolkit services.
-
-  What do you want to do?
-  ▶ Setup
-    Configure agent
-    Sign up for TwilioWorld
-    Uninstall
-    Exit
+  ↑/↓ or j/k navigate    Enter run    Setup changes install choices    q quit
 ```
 
 Setup asks what to install or wire once, then Configure agent uses those choices
@@ -60,12 +73,17 @@ silently. The fastest path to a working agent is:
 2. Back at the menu → **Chat with Twilio** for instant Q&A, or **Configure
    agent** → pick any agent (Pi included) to wire it up
 
+**Chat with Twilio** and **Model server** only appear after the local model and
+runtime are installed. **Dev Phone** appears only if it is selected or already
+installed. **Sign up for TwilioWorld** is always visible and opens
+`https://twilio.world` in your browser.
+
 Setup, agent configuration, local chat, and model server control all run inside the
 TUI dashboard. **Pi** and **Dev Phone** are different — they're real interactive CLIs,
 so choosing them opens a brand-new terminal window and runs there. The dashboard
 keeps running in this window; nothing is suspended or handed over. Every agent —
 Pi included — is configured through the same "Configure agent" menu item; none of
-them get a dedicated menu entry or add-on toggle of their own. Pi is the one agent
+them get a dedicated menu entry or install-choice toggle of their own. Pi is the one agent
 the toolkit can fully install and launch for you (it needs a model to talk to and a
 process to start); the others are external tools you already have, so Configure
 agent prints the exact MCP-wiring command for those instead.
@@ -90,11 +108,13 @@ disappear from the menu.
 | **Twilio CLI** | The command line to all things Twilio, logged in and ready. |
 | **Dev Phone** | A browser soft phone — make/receive real SMS + voice with no physical device. |
 | **Pi** *(one of several agent options)* | [Pi](https://pi.dev) is the one agent the toolkit can fully install, wire, and launch for you — Configure agent → Pi does everything in one step. |
+| **TwilioWorld signup** | Always-visible dashboard action that opens `https://twilio.world` in your browser. |
 
 ### Install choices
 
-The base toolkit gives you the menu and repo-local assets. Setup choices decide what gets
-installed locally and what gets attached when you configure an agent:
+The base toolkit gives you the menu and repo-local assets. Setup groups choices
+under **Local chat**, **Coding agents**, and **Twilio tools**. Those choices decide
+what gets installed locally and what gets attached when you configure an agent:
 
 | Choice | What it does | Default |
 | --- | --- | --- |
@@ -119,8 +139,8 @@ pitfalls; Docs MCP retrieves current endpoint schemas and documentation details.
 - A **Twilio account** (only needed for Execute MCP and Dev Phone)
 - ~2.5 GB free disk if you want the local Gemma model
 
-The toolkit can install the Twilio CLI, Dev Phone plugin, Pi, OpenCode, llamafile
-runtime, and local Gemma model files when those choices are selected.
+The toolkit can install the Twilio CLI, Dev Phone plugin, supported agent CLIs,
+llamafile runtime, and local Gemma model files when those choices are selected.
 
 ---
 
@@ -133,18 +153,20 @@ runtime, and local Gemma model files when those choices are selected.
 5. **Dev Phone** — installs the plugin only if selected.
 6. **Skills** — initializes the submodule and installs skills globally if the agent Skills choice is enabled.
 
-Then it verifies your credentials with a real API call and prints a cheat sheet.
+If a Twilio account is active, Setup verifies the credentials with a real API call.
+When it finishes, it returns you to the dashboard.
 
 ---
 
 ## Per-agent setup
 
-The toolkit uses each agent's **native** install path — nothing proprietary. All
-six are configured the same way: `./toolkit` → **Configure agent** → pick one.
-For Claude Code, Codex, Cursor, OpenCode, and Pi, that single step **installs the
-agent if it's missing, wires your selected Skills/MCP choices, and launches the
-agent in a brand-new terminal window** — the dashboard keeps running in this one,
-so you land somewhere you can actually start working, not just a wall of text.
+The toolkit uses each agent's **native** install path — nothing proprietary. Each
+supported agent starts from the same place: `./toolkit` → **Configure agent** →
+pick one. For Claude Code, Codex, Cursor, and Pi, that step installs the agent if
+it's missing, wires your selected Skills/MCP choices, and opens the agent in a
+brand-new terminal window. OpenCode is the exception: Configure agent installs it
+if needed and prints the launch command, because OpenCode's own `/connect` step
+needs your input before it is useful.
 
 ### Claude Code
 
@@ -211,7 +233,7 @@ Configure agent prints for you.
 
 `opencode.json` (in this repo) defines both MCP servers, committed with static
 defaults that match the toolkit's own defaults: Docs MCP on, Execute MCP off.
-This file is never modified by the toolkit — if your add-on choices differ
+This file is never modified by the toolkit — if your install choices differ
 from those defaults, Configure agent prints an `OPENCODE_CONFIG_CONTENT`
 override for you rather than rewriting the tracked file. For serious agent
 work, pick a cloud model with `/connect` inside OpenCode (Anthropic, OpenAI,
@@ -228,7 +250,7 @@ To enable the Execute MCP:
 ```bash
 source .toolkit/.env   # created by Setup, chmod 600 — never printed to the log
 
-# If you enabled Execute MCP as an add-on, Configure agent will have printed
+# If you enabled Execute MCP as an install choice, Configure agent will have printed
 # an override like this (opencode.json's committed default stays off):
 export OPENCODE_CONFIG_CONTENT='{"$schema":"https://opencode.ai/config.json","mcp":{"twilio-execute":{"enabled":true}}}'
 ```
@@ -240,8 +262,8 @@ before it's useful.
 
 ### Pi
 
-The one of the six the toolkit fully installs, wires, **and launches** with zero
-manual follow-up beyond that — it needs a model to talk to (local Gemma) and a
+Pi is the agent the toolkit fully installs, wires, **and launches** with zero
+manual follow-up beyond that. It needs a model to talk to (local Gemma) and a
 process started, so Configure agent does all of that in one step and opens Pi in
 a brand-new terminal window:
 
@@ -358,6 +380,7 @@ container. The footprint is small and fully reversible:
 | Dev Phone plugin | Twilio CLI plugins | `uninstall.sh` |
 | Scoped API key | your Twilio account | `uninstall.sh` |
 | Skills copy | `~/.agents/skills/twilio/`, `~/.agents/skills/sendgrid/` | `uninstall.sh` |
+| Local toolkit copy of Skills | `vendor/twilio-ai/skills/` | `uninstall.sh` |
 | Local config + Execute MCP creds | `.toolkit/config.json`, `.toolkit/.env` | `uninstall.sh` |
 | llamafile + model | `tools/`, `models/` (in this repo) | `uninstall.sh` |
 

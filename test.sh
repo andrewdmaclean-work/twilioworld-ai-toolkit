@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# test.sh — smoke tests for the TwilioWorld AI Toolkit.
+# test.sh — smoke tests for the TwilioWorld Agentic Coding Toolkit.
 # All logic now lives in tui/src/. No bash scripts to parse or dry-run.
 #
 #   ./test.sh           # all checks (offline-safe except --net)
@@ -118,6 +118,14 @@ check "terminal easter egg is wired" bash -c '
   grep -q "screen.focusable = true" tui/src/screens/invaders.ts &&
   grep -q "konamiSecret" tui/src/index.ts &&
   grep -q "typedSecret = \"twilio\"" tui/src/index.ts
+'
+check "README mirrors dashboard labels" bash -c '
+  grep -q "Actions" README.md &&
+  grep -q "Install Choices" README.md &&
+  grep -q "Selected Action" README.md &&
+  grep -q "Sign up for TwilioWorld" README.md &&
+  grep -q "TwilioWorld Agentic Coding Toolkit" README.md &&
+  grep -q "twilioworld-agentic-coding-toolkit" README.md
 '
 check "uninstall available from TUI" bash -c '
   grep -q "buildUninstallScreen" tui/src/index.ts &&

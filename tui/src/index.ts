@@ -1,4 +1,4 @@
-// index.ts — TwilioWorld AI Toolkit TUI
+// index.ts — TwilioWorld Agentic Coding Toolkit TUI
 // Layout: branded header · actions · active features · selected-action detail.
 
 import {
@@ -69,7 +69,7 @@ function assertInteractiveTerminal(): void {
   if (process.env.TOOLKIT_TUI_SMOKE === "1") return;
   const term = process.env.TERM ?? "";
   if (!process.stdin.isTTY || !process.stdout.isTTY || term === "dumb") {
-    console.error("TwilioWorld AI Toolkit requires an interactive terminal for OpenTUI.");
+    console.error("TwilioWorld Agentic Coding Toolkit requires an interactive terminal for OpenTUI.");
     console.error("Run ./toolkit from a real terminal window, not through a pipe, task runner output panel, or dumb terminal.");
     process.exit(2);
   }
@@ -79,7 +79,7 @@ function assertCompatibleNode(): void {
   if (process.env.TOOLKIT_TUI_SMOKE === "1") return;
   const nodeInfo = pathNodeVersion();
   if (!supportsPiNode(nodeInfo)) {
-    console.error("TwilioWorld AI Toolkit requires Node >= 22.19.0 on PATH.");
+    console.error("TwilioWorld Agentic Coding Toolkit requires Node >= 22.19.0 on PATH.");
     console.error(`Current node is ${nodeInfo?.raw ?? "not found"}. Run: nvm install 22 && nvm use 22`);
     process.exit(2);
   }
@@ -95,7 +95,7 @@ function assertNotRoot(): void {
   if (process.platform === "win32") return;
   if (typeof process.getuid !== "function") return;
   if (process.getuid() === 0) {
-    console.error("TwilioWorld AI Toolkit should not be run as root.");
+    console.error("TwilioWorld Agentic Coding Toolkit should not be run as root.");
     console.error("Re-run ./toolkit as your normal user — sudo here would root-own your model files and config.");
     process.exit(2);
   }
@@ -336,7 +336,7 @@ function buildDashboard(renderer: CliRenderer, onQuit: () => void) {
     id: "header",
     borderStyle: "double",
     borderColor: RED,
-    title: " TwilioWorld AI Toolkit ",
+    title: " TwilioWorld Agentic Coding Toolkit ",
     titleColor: WHITE,
     paddingX: 1,
     flexDirection: "column",
@@ -481,7 +481,7 @@ function buildDashboard(renderer: CliRenderer, onQuit: () => void) {
     const BANNER_MIN_WIDTH = 44 + 4 + 8;
     const wide = W >= BANNER_MIN_WIDTH;
     banner.visible = wide;
-    header.title = wide ? "" : " TwilioWorld AI Toolkit ";
+    header.title = wide ? "" : " TwilioWorld Agentic Coding Toolkit ";
 
     const headerH = wide ? 7 : 5; // 2 banner rows + 3 text rows + 2 border, vs. 3 text rows + 2 border
     const bodyH = Math.max(8, H - headerH - 2);
@@ -635,7 +635,7 @@ async function main() {
 
   if (process.env.TOOLKIT_TUI_SMOKE === "1") {
     const status = await readStatusAsync();
-    console.log("TwilioWorld AI Toolkit");
+    console.log("TwilioWorld Agentic Coding Toolkit");
     console.log(headlineText(status));
     console.log(addonLine(status));
     for (const line of statusLines(status)) console.log(line.text);
