@@ -25,7 +25,7 @@ while the execute-capable MCP stays off until you explicitly select it.
 
 ```bash
 git clone --recursive <this-repo-url>
-cd twilioworld-ai-toolkit
+cd twilioworld-agentic-coding-toolkit
 ./toolkit
 ```
 
@@ -35,9 +35,9 @@ cd twilioworld-ai-toolkit
 `./toolkit` is the command you use from the repo root. Arrow keys to navigate:
 
 ```
-╔══════════════════════════════════╗
-║  TwilioWorld AI Toolkit          ║
-╚══════════════════════════════════╝
+╔══════════════════════════════════════════════╗
+║  TwilioWorld Agentic Coding Toolkit          ║
+╚══════════════════════════════════════════════╝
 
   Install choices  Local chat model, Agent Skills, Agent Docs MCP
 
