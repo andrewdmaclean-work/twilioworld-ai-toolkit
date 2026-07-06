@@ -54,7 +54,7 @@ export function buildLogScreen(
   run: (
     onLog: (line: string, stream: "stdout" | "stderr") => void,
     onDone: (ok: boolean) => void,
-  ) => void,
+  ) => void | Promise<void>,
   onFinished: (ok: boolean) => void,
 ): BoxRenderable {
   const { screen, body, footer } = buildEmbeddedRouteChrome(renderer, {
@@ -109,12 +109,26 @@ export function buildLogScreen(
   // Yield at least one render frame before setup/uninstall begins. Those flows
   // do some synchronous local checks before their first subprocess, and starting
   // them in a microtask makes the TUI look frozen after the user confirms.
+  //
+  // `run` is typically async (returns a Promise). A synchronous try/catch only
+  // catches synchronous throws — a REJECTED promise would escape it, become an
+  // unhandledRejection, and the top-level handler in index.ts would shut the
+  // whole TUI down. So we catch both: the sync throw AND the async rejection,
+  // routing either into the log pane + onDone(false) instead of killing the app.
   setTimeout(() => {
+    let doneCalled = false;
+    const safeDone = (ok: boolean) => { if (!doneCalled) { doneCalled = true; onDone(ok); } };
     try {
-      run(onLog, onDone);
+      const maybePromise = run(onLog, safeDone) as unknown;
+      if (maybePromise && typeof (maybePromise as Promise<unknown>).then === "function") {
+        (maybePromise as Promise<unknown>).catch((e: unknown) => {
+          onLog(`error: ${(e as Error)?.message ?? String(e)}`, "stderr");
+          safeDone(false);
+        });
+      }
     } catch (e) {
       onLog((e as Error).message, "stderr");
-      onDone(false);
+      safeDone(false);
     }
   }, START_DELAY_MS);
 

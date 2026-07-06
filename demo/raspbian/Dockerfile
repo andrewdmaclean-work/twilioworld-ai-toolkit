@@ -69,6 +69,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       lxterminal \
       epiphany-browser \
       pi-package \
+      locales \
+      fonts-dejavu \
+      fonts-noto-core \
       tigervnc-standalone-server \
       tigervnc-common \
       novnc \
@@ -83,6 +86,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       xterm \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# ── UTF-8 locale ─────────────────────────────────────────────────────────
+# Without a generated UTF-8 locale, LXTerminal/xterm can't decode the
+# multi-byte box-drawing, arrow, and symbol glyphs the OpenTUI dashboard
+# emits (╔ ═ │ ─ ▶ ✓ ✗ → · …). They render as "???"/garbage blobs and the
+# whole TUI frame corrupts. Generate en_US.UTF-8 and export it globally so
+# every shell (including the non-login VNC session) inherits it. The
+# fonts-dejavu / fonts-noto-core packages above provide the actual glyphs.
+RUN sed -i 's/^# *\(en_US.UTF-8 UTF-8\)/\1/' /etc/locale.gen \
+    && locale-gen \
+    && update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+ENV LANG=en_US.UTF-8 \
+    LANGUAGE=en_US:en \
+    LC_ALL=en_US.UTF-8
 
 # ── Non-root desktop user (matches the classic Pi "pi" user idea) ────────
 RUN useradd -m -s /bin/bash pi \
@@ -105,11 +122,22 @@ RUN mkdir -p /home/pi/.config/lxpanel /home/pi/.config/pcmanfm /home/pi/.config/
     cp -r /etc/xdg/lxpanel/LXDE-pi /home/pi/.config/lxpanel/ && \
     cp -r /etc/xdg/pcmanfm/LXDE-pi /home/pi/.config/pcmanfm/ && \
     cp -r /etc/xdg/lxsession/LXDE-pi /home/pi/.config/lxsession/ && \
+    mkdir -p /home/pi/.config/lxterminal && \
+    printf '%s\n' \
+      '[general]' \
+      'fontname=DejaVu Sans Mono 11' \
+      'scrollback=10000' \
+      'bgcolor=rgb(0,0,0)' \
+      'fgcolor=rgb(211,211,211)' \
+      'disallowbold=false' \
+      > /home/pi/.config/lxterminal/lxterminal.conf && \
     mkdir -p /home/pi/.vnc && \
     printf '%s\n' \
       '#!/bin/sh' \
       'unset SESSION_MANAGER' \
       'unset DBUS_SESSION_BUS_ADDRESS' \
+      'export LANG=en_US.UTF-8' \
+      'export LC_ALL=en_US.UTF-8' \
       'exec startlxde-pi' \
       > /home/pi/.vnc/xstartup && \
     chmod +x /home/pi/.vnc/xstartup
