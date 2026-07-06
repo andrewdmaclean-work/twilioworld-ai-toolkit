@@ -29,20 +29,61 @@ fi
 cd "$ROOT/tui"
 [[ -d node_modules ]] || bun install
 
-if [[ "${TOOLKIT_TUI_SMOKE:-}" != "1" ]]; then
-  if ! command -v node >/dev/null 2>&1; then
-    echo "TwilioWorld Agentic Coding Toolkit requires Node >= 22.19.0 on PATH." >&2
-    echo "Node was not found. Install Node 22 and re-run: nvm install 22 && nvm use 22" >&2
-    exit 2
+# ── Node >= 22.19.0 requirement ──────────────────────────────────────────
+# The TUI (and Pi) need a modern Node on PATH. bun above is only the TUI
+# runtime; several agent/tooling paths still shell out to `node`/`npm`.
+# If Node is missing or too old we offer to install it via nvm (no sudo,
+# no system-wide change — it lives in ~/.nvm and is the most portable
+# option across macOS/Linux). We prompt first because installing nvm
+# writes to the user's shell rc files.
+node_ok() {
+  command -v node >/dev/null 2>&1 || return 1
+  local v major rest minor
+  v="$(node --version | sed 's/^v//')"
+  major="${v%%.*}"; rest="${v#*.}"; minor="${rest%%.*}"
+  (( major > 22 || (major == 22 && minor >= 19) ))
+}
+
+# Load nvm into THIS shell if it's already installed but not sourced
+# (non-interactive shells don't run the rc lines that define `nvm`).
+load_nvm() {
+  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  # shellcheck disable=SC1091
+  [[ -s "$NVM_DIR/nvm.sh" ]] && . "$NVM_DIR/nvm.sh" >/dev/null 2>&1
+  command -v nvm >/dev/null 2>&1
+}
+
+install_node_via_nvm() {
+  echo "Installing nvm + Node 22 (this writes to ~/.nvm and your shell profile)..." >&2
+  if ! load_nvm; then
+    curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash \
+      || { echo "nvm install failed. Install Node 22 manually: https://nodejs.org" >&2; return 1; }
+    load_nvm || { echo "nvm installed but could not be loaded into this shell. Open a new terminal and re-run ./toolkit." >&2; return 1; }
   fi
-  NODE_VERSION="$(node --version | sed 's/^v//')"
-  NODE_MAJOR="${NODE_VERSION%%.*}"
-  NODE_REST="${NODE_VERSION#*.}"
-  NODE_MINOR="${NODE_REST%%.*}"
-  if (( NODE_MAJOR < 22 || (NODE_MAJOR == 22 && NODE_MINOR < 19) )); then
-    echo "TwilioWorld Agentic Coding Toolkit requires Node >= 22.19.0 on PATH." >&2
-    echo "Current node is v${NODE_VERSION}. Run: nvm install 22 && nvm use 22" >&2
-    exit 2
+  nvm install 22 || { echo "nvm install 22 failed." >&2; return 1; }
+  nvm use 22 >/dev/null 2>&1 || return 1
+  node_ok
+}
+
+if [[ "${TOOLKIT_TUI_SMOKE:-}" != "1" ]] && ! node_ok; then
+  # Maybe nvm already has a good Node, just not loaded into this shell.
+  if load_nvm && nvm use 22 >/dev/null 2>&1 && node_ok; then
+    :  # good — nvm's Node 22 is now active for this run
+  else
+    current="$(command -v node >/dev/null 2>&1 && node --version || echo 'not found')"
+    echo "TwilioWorld Agentic Coding Toolkit requires Node >= 22.19.0 on PATH (current: ${current})." >&2
+    if [[ -t 0 ]]; then
+      printf "Install Node 22 now via nvm? [y/N] " >&2
+      read -r reply
+    else
+      reply="n"
+    fi
+    if [[ "$reply" =~ ^[Yy]$ ]] && install_node_via_nvm; then
+      echo "Node $(node --version) is now active for this session." >&2
+    else
+      echo "Skipping auto-install. Install Node 22 and re-run:  nvm install 22 && nvm use 22" >&2
+      exit 2
+    fi
   fi
 fi
 
