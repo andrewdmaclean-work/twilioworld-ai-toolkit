@@ -56,6 +56,11 @@ load_nvm() {
 install_node_via_nvm() {
   echo "Installing nvm + Node 22 (this writes to ~/.nvm and your shell profile)..." >&2
   if ! load_nvm; then
+    # A stale/exported NVM_DIR that points at a missing directory makes the
+    # official installer bail ("that directory does not exist"). Normalize it
+    # first: pick a real target and make sure it exists before installing.
+    export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+    mkdir -p "$NVM_DIR" || { echo "Could not create $NVM_DIR. Install Node 22 manually: https://nodejs.org" >&2; return 1; }
     curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash \
       || { echo "nvm install failed. Install Node 22 manually: https://nodejs.org" >&2; return 1; }
     load_nvm || { echo "nvm installed but could not be loaded into this shell. Open a new terminal and re-run ./toolkit." >&2; return 1; }
