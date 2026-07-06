@@ -105,6 +105,7 @@ check "index.ts has all menu items"   bash -c '
   grep -q '"'"'setup'"'"' tui/src/index.ts &&
   grep -q '"'"'agent'"'"' tui/src/index.ts &&
   grep -q '"'"'signup'"'"' tui/src/index.ts &&
+  grep -q '"'"'aidocs'"'"' tui/src/index.ts &&
   grep -q '"'"'uninstall'"'"' tui/src/index.ts
 '
 check "signup opens TwilioWorld" bash -c '
@@ -112,6 +113,12 @@ check "signup opens TwilioWorld" bash -c '
   grep -q "https://twilio.world" tui/src/index.ts &&
   grep -q "export function openUrl" tui/src/lib/exec.ts
 '
+check "Twilio AI Docs quick link wired" bash -c '
+  grep -q "Twilio AI Docs" tui/src/index.ts &&
+  grep -q "https://www.twilio.com/docs/ai" tui/src/index.ts
+'
+check "agent picker offers GitHub Copilot" grep -q "GitHub Copilot" tui/src/screens/agent.ts
+check "README links Twilio AI docs" grep -q "https://www.twilio.com/docs/ai)" README.md
 check "terminal easter egg is wired" bash -c '
   grep -q "buildInvadersScreen" tui/src/index.ts &&
   grep -q "Signal Invaders" tui/src/screens/invaders.ts &&
@@ -141,13 +148,21 @@ check "index.ts has ASCII wordmark banner" bash -c '
 '
 check "agent picker has no Pi favoritism" bash -c '! grep -iq "recommended\|built-in" tui/src/screens/agent.ts'
 check "configure-agent launches Pi via lib/pi.ts" grep -q 'launchPi' tui/src/lib/configure-agent.ts
-check "configure-agent auto-installs Claude/Codex/Cursor" bash -c '
+check "configure-agent auto-installs Claude/Codex/Cursor/Copilot" bash -c '
   grep -q "@anthropic-ai/claude-code" tui/src/lib/configure-agent.ts &&
   grep -q "@openai/codex" tui/src/lib/configure-agent.ts &&
-  grep -q "cursor-cli" tui/src/lib/configure-agent.ts
+  grep -q "cursor-cli" tui/src/lib/configure-agent.ts &&
+  grep -q "@github/copilot" tui/src/lib/configure-agent.ts
 '
-check "configure-agent auto-launches Claude/Codex/Cursor" bash -c '
-  grep -c "openInNewWindow" tui/src/lib/configure-agent.ts | grep -q "^[3-9]"
+check "all non-Pi agents share configureStandardAgent" bash -c '
+  grep -q "async function configureStandardAgent" tui/src/lib/configure-agent.ts &&
+  [ "$(grep -c "await configureStandardAgent(" tui/src/lib/configure-agent.ts)" -eq 5 ]
+'
+check "configureStandardAgent launches every agent in a new window" bash -c '
+  grep -q "openInNewWindow(spec.bin" tui/src/lib/configure-agent.ts
+'
+check "OpenCode no longer print-only (launches like the rest)" bash -c '
+  ! grep -q "rather than.*opening a new window" tui/src/lib/configure-agent.ts
 '
 check "index uses openInNewWindow"    bash -c 'grep -q "openInNewWindow" tui/src/index.ts && grep -q "openInNewWindow" tui/src/lib/pi.ts'
 check "no suspend/resume left in index" bash -c '! grep -q "renderer.suspend\|renderer.resume" tui/src/index.ts'

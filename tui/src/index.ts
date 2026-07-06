@@ -160,7 +160,7 @@ function statusLines(s: ToolkitStatus | null) {
 }
 
 // ── Menu definition ──────────────────────────────────────────────────
-type ItemId = "chat"|"server"|"devphone"|"setup"|"agent"|"signup"|"uninstall"|"exit";
+type ItemId = "chat"|"server"|"devphone"|"setup"|"agent"|"signup"|"aidocs"|"uninstall"|"exit";
 
 interface MenuItem {
   id: ItemId;
@@ -200,6 +200,11 @@ const ALL_ITEMS: MenuItem[] = [
     detail: () => "open twilio.world in your browser",
     visible: () => true },
 
+  { id: "aidocs",
+    label: () => "Twilio AI Docs",
+    detail: () => "open twilio.com/docs/ai in your browser",
+    visible: () => true },
+
   { id: "uninstall",
     label: () => "Uninstall",
     detail: () => "choose exactly what to remove from this machine",
@@ -212,7 +217,7 @@ const ALL_ITEMS: MenuItem[] = [
 ];
 
 function visibleItems(s: ToolkitStatus | null): MenuItem[] {
-  if (!s) return ALL_ITEMS.filter((m) => ["setup","agent","signup","uninstall","exit"].includes(m.id));
+  if (!s) return ALL_ITEMS.filter((m) => ["setup","agent","signup","aidocs","uninstall","exit"].includes(m.id));
   return ALL_ITEMS.filter((m) => m.visible(s));
 }
 
@@ -323,6 +328,15 @@ function detailFor(item: MenuItem | undefined, s: ToolkitStatus | null): string 
         "",
         "Destination",
         "  https://twilio.world",
+      ].join("\n");
+    case "aidocs":
+      return [
+        "Purpose",
+        "  Open the Twilio AI documentation hub in your browser —",
+        "  Skills, MCP, and the rest of the AI developer surface.",
+        "",
+        "Destination",
+        "  https://www.twilio.com/docs/ai",
       ].join("\n");
   }
 }
@@ -718,6 +732,11 @@ async function main() {
       case "signup": {
         const res = openUrl("https://twilio.world");
         flash(res.ok ? "Opening twilio.world in your browser" : `⚠  ${res.error}`, res.ok ? GREEN : YELLOW);
+        break;
+      }
+      case "aidocs": {
+        const res = openUrl("https://www.twilio.com/docs/ai");
+        flash(res.ok ? "Opening twilio.com/docs/ai in your browser" : `⚠  ${res.error}`, res.ok ? GREEN : YELLOW);
         break;
       }
       case "uninstall": busy = true; showRoute(buildUninstallScreen(renderer, back, back), "Uninstall"); break;

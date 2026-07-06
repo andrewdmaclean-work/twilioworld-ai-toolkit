@@ -11,7 +11,8 @@ to install or wire into your agent, and your agent is ready to build and run rea
 through docs and no copying configs.
 
 **Chat with the local model right inside the TUI** — no external agent required.
-Or configure any coding agent — Pi, OpenCode, Claude Code, Cursor, Codex, or your
+Or configure any coding agent — Pi, OpenCode, Claude Code, Cursor, Codex, GitHub
+Copilot, or your
 own — and the toolkit wires up the same Skills/Docs MCP/Execute MCP knowledge layer
 for it. No agent gets special treatment: pick whichever fits, from one menu.
 
@@ -162,11 +163,11 @@ When it finishes, it returns you to the dashboard.
 
 The toolkit uses each agent's **native** install path — nothing proprietary. Each
 supported agent starts from the same place: `./toolkit` → **Configure agent** →
-pick one. For Claude Code, Codex, Cursor, and Pi, that step installs the agent if
-it's missing, wires your selected Skills/MCP choices, and opens the agent in a
-brand-new terminal window. OpenCode is the exception: Configure agent installs it
-if needed and prints the launch command, because OpenCode's own `/connect` step
-needs your input before it is useful.
+pick one. For the CLI-based agents — Claude Code, Codex, Cursor, OpenCode, and
+GitHub Copilot — that step is identical: it installs the agent if it's missing,
+wires your selected Skills/MCP choices, and opens the agent in a brand-new
+terminal window. Pi is the only structural exception: it's a local agent, so
+Configure agent also starts the local Gemma model it talks to before launching.
 
 ### Claude Code
 
@@ -256,9 +257,9 @@ export OPENCODE_CONFIG_CONTENT='{"$schema":"https://opencode.ai/config.json","mc
 ```
 
 Configure agent installs OpenCode for you (Homebrew tap → npm) if it isn't on
-PATH yet, then prints the launch command — `cd <repo> && opencode` — rather than
-opening a new window, since OpenCode's own `/connect` step needs your input
-before it's useful.
+PATH yet, then opens it in a brand-new terminal window — the same as every other
+CLI-based agent. OpenCode still needs a model before it's useful, so run its
+`/connect` step in that window to pick one (Anthropic, OpenAI, or OpenCode Zen).
 
 ### Pi
 
@@ -434,5 +435,6 @@ you run Setup with Execute MCP or Dev Phone selected.
 ---
 
 Built on [github.com/twilio/ai](https://github.com/twilio/ai) ·
+[Twilio AI docs](https://www.twilio.com/docs/ai) ·
 [Twilio MCP docs](https://www.twilio.com/docs/ai/mcp) ·
 [Twilio Skills docs](https://www.twilio.com/docs/ai/skills)
