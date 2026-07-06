@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>TwilioWorld Agentic Coding Toolkit — Setup</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --red: #F22F46;
+    --red-dim: #5C0013;
+    --bg: #0B0B0F;
+    --panel: #14141a;
+    --border: #2a2a33;
+    --white: #FFFFFF;
+    --silver: #CCCCCC;
+    --dim: #8a8a94;
+    --green: #22C55E;
+    --yellow: #F59E0B;
+    --cyan: #38BDF8;
+    --err: #EF4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--silver);
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  header {
+    background: linear-gradient(90deg, var(--red-dim), var(--bg));
+    border-bottom: 2px solid var(--red);
+    padding: 20px 28px;
+  }
+  header h1 { margin: 0; color: var(--white); font-size: 20px; letter-spacing: 0.3px; }
+  header p { margin: 4px 0 0; color: var(--cyan); font-size: 13px; font-family: ui-monospace, Menlo, monospace; }
+  main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px 28px 60px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .panel.wide { grid-column: 1 / -1; }
+  .panel h2 {
+    margin: 0 0 4px;
+    font-size: 14px;
+    color: var(--red);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .panel .sub { color: var(--dim); font-size: 12.5px; margin-bottom: 14px; }
+  label.choice {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 6px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  label.choice:hover { background: rgba(255,255,255,0.03); }
+  label.choice input { margin-top: 3px; accent-color: var(--red); width: 15px; height: 15px; }
+  label.choice .t { font-size: 14px; color: var(--white); }
+  label.choice .d { font-size: 12px; color: var(--dim); }
+  .btnrow { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  button {
+    background: var(--red);
+    color: white;
+    border: none;
+    padding: 9px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button.secondary { background: transparent; border: 1px solid var(--border); color: var(--silver); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  select {
+    width: 100%;
+    background: #1a1a22;
+    color: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+  .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .status-item { background: #1a1a22; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .status-item .k { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; }
+  .status-item .v { font-size: 14px; color: var(--white); margin-top: 2px; }
+  .status-item .v.ok { color: var(--green); }
+  .status-item .v.warn { color: var(--yellow); }
+  pre#log {
+    background: #05050a;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    height: 260px;
+    overflow-y: auto;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 12.5px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    margin: 0;
+  }
+  .line-stdout { color: var(--silver); }
+  .line-ok { color: var(--green); }
+  .line-warn { color: var(--yellow); }
+  .line-err { color: var(--err); }
+  .line-step { color: var(--red); font-weight: 600; }
+  .footer-note { color: var(--dim); font-size: 11.5px; margin-top: 10px; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>TwilioWorld Agentic Coding Toolkit</h1>
+    <p id="headline">loading status…</p>
+  </header>
+
+  <main>
+    <div class="panel wide">
+      <h2>Status</h2>
+      <div class="sub">Live, read from the same checks the real TUI polls.</div>
+      <div class="status-grid" id="statusGrid"></div>
+      <div class="btnrow"><button class="secondary" onclick="refreshStatus()">Refresh status</button></div>
+    </div>
+
+    <div class="panel">
+      <h2>Install Choices</h2>
+      <div class="sub">Same options as Setup in the TUI. Saves to .toolkit/config.json.</div>
+      <div id="choices"></div>
+      <div class="btnrow">
+        <button onclick="saveChoices()">Save choices</button>
+        <button class="secondary" onclick="runSetup()" id="setupBtn">Run Setup now</button>
+      </div>
+      <div class="footer-note">"Run Setup now" is real — it will actually install whatever is checked (model download, Skills copy, Twilio CLI, etc).</div>
+    </div>
+
+    <div class="panel">
+      <h2>Configure Agent</h2>
+      <div class="sub">Wires Skills + MCP servers into the agent you pick.</div>
+      <select id="agentSelect">
+        <option value="Claude Code">Claude Code</option>
+        <option value="Codex">Codex</option>
+        <option value="Cursor">Cursor</option>
+        <option value="OpenCode" selected>OpenCode</option>
+        <option value="Pi (lightweight TUI)">Pi</option>
+        <option value="Other / Bring my own">Other / Bring my own</option>
+      </select>
+      <div class="btnrow">
+        <button onclick="runConfigureAgent()" id="agentBtn">Configure agent</button>
+      </div>
+      <div class="footer-note">Real — runs the exact same configureAgent() logic as the TUI.</div>
+    </div>
+
+    <div class="panel wide">
+      <h2>Live Output</h2>
+      <div class="sub">Streaming straight from the running command.</div>
+      <pre id="log">Idle. Run Setup or Configure agent to see live output here.</pre>
+    </div>
+  </main>
+
+<script>
+const ADDONS = [
+  { key: "localGemma",   group: "Local chat",   label: "Local model for Chat with Twilio", desc: "Required for in-app local chat (~2.5 GB)" },
+  { key: "twilioSkills", group: "Coding agents", label: "Install Twilio Skills for agents", desc: "Make Twilio Skills available to coding agents" },
+  { key: "docsMcp",      group: "Coding agents", label: "Add Docs MCP to agents",           desc: "Give coding agents live Twilio API search" },
+  { key: "executeMcp",   group: "Coding agents", label: "Add Execute MCP to agents",        desc: "Let agents call real Twilio APIs — experimental" },
+  { key: "devPhone",     group: "Twilio tools",  label: "Install Dev Phone",                desc: "Browser soft phone for SMS + voice" },
+];
+
+let currentAddons = {};
+
+function renderChoices() {
+  const el = document.getElementById("choices");
+  let html = "";
+  let lastGroup = "";
+  for (const a of ADDONS) {
+    if (a.group !== lastGroup) {
+      html += \`<div style="margin:10px 0 2px;font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em">\${a.group}</div>\`;
+      lastGroup = a.group;
+    }
+    const checked = currentAddons[a.key] ? "checked" : "";
+    html += \`<label class="choice"><input type="checkbox" data-key="\${a.key}" \${checked} />
+      <span><div class="t">\${a.label}</div><div class="d">\${a.desc}</div></span></label>\`;
+  }
+  el.innerHTML = html;
+}
+
+async function loadConfig() {
+  const res = await fetch("/api/config");
+  const cfg = await res.json();
+  currentAddons = cfg.addons ?? {};
+  renderChoices();
+}
+
+async function saveChoices() {
+  const inputs = document.querySelectorAll("#choices input[type=checkbox]");
+  const body = {};
+  inputs.forEach((i) => { body[i.dataset.key] = i.checked; });
+  const res = await fetch("/api/config", { method: "POST", body: JSON.stringify(body) });
+  const cfg = await res.json();
+  currentAddons = cfg.addons;
+  renderChoices();
+  logLine("✓ Choices saved to .toolkit/config.json", "stdout");
+}
+
+function fmtVal(v) {
+  if (v === true) return "yes";
+  if (v === false) return "no";
+  return String(v);
+}
+
+async function refreshStatus() {
+  const res = await fetch("/api/status");
+  const s = await res.json();
+  document.getElementById("headline").textContent =
+    (s.model.running ? "model online" : s.model.ready ? "model ready" : "model missing") +
+    "  |  " + (s.twilio.sid ? "Twilio " + s.twilio.profile : "Twilio not logged in");
+
+  const items = [
+    ["Model ready", s.model.ready, s.model.ready],
+    ["Model running", s.model.running, s.model.running],
+    ["Twilio CLI", s.twilio.installed, s.twilio.installed],
+    ["Twilio logged in", Boolean(s.twilio.sid), Boolean(s.twilio.sid)],
+    ["OpenCode", s.opencode.installed, s.opencode.installed],
+    ["Skills available", s.skills.count + " found", s.skills.count > 0],
+    ["Skills installed globally", s.skills.installedCount + " found", s.skills.installedCount > 0],
+    ["Node", s.node.version, s.node.supportsPi],
+  ];
+  document.getElementById("statusGrid").innerHTML = items.map(([k, v, ok]) =>
+    \`<div class="status-item"><div class="k">\${k}</div><div class="v \${ok ? "ok" : "warn"}">\${typeof v === "boolean" ? fmtVal(v) : v}</div></div>\`
+  ).join("");
+}
+
+function colorClass(line) {
+  if (line.startsWith("✓")) return "line-ok";
+  if (line.startsWith("✗")) return "line-err";
+  if (line.startsWith("⚠")) return "line-warn";
+  if (line.startsWith("▶")) return "line-step";
+  return "line-stdout";
+}
+
+function logLine(line, stream) {
+  const pre = document.getElementById("log");
+  if (pre.textContent === "Idle. Run Setup or Configure agent to see live output here.") pre.textContent = "";
+  const span = document.createElement("div");
+  span.className = colorClass(line);
+  span.textContent = line;
+  pre.appendChild(span);
+  pre.scrollTop = pre.scrollHeight;
+}
+
+async function streamPost(url, body, onDone) {
+  const res = await fetch(url, { method: "POST", body: body ? JSON.stringify(body) : undefined });
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const parts = buf.split("\\n\\n");
+    buf = parts.pop() ?? "";
+    for (const part of parts) {
+      const m = part.match(/^data: (.*)$/m);
+      if (!m) continue;
+      const payload = JSON.parse(m[1]);
+      if (payload.line) logLine(payload.line, payload.stream);
+      if (payload.done) { onDone?.(payload.ok); }
+    }
+  }
+}
+
+async function runSetup() {
+  document.getElementById("log").textContent = "";
+  const btn = document.getElementById("setupBtn");
+  btn.disabled = true;
+  logLine("▶ Starting Setup…", "stdout");
+  await streamPost("/api/setup", null, (ok) => {
+    logLine(ok ? "✓ Setup finished." : "✗ Setup finished with errors.", "stdout");
+    btn.disabled = false;
+    refreshStatus();
+  });
+}
+
+async function runConfigureAgent() {
+  document.getElementById("log").textContent = "";
+  const btn = document.getElementById("agentBtn");
+  const agent = document.getElementById("agentSelect").value;
+  btn.disabled = true;
+  logLine(\`▶ Configuring agent: \${agent}\`, "stdout");
+  await streamPost("/api/configure-agent", { agent }, (ok) => {
+    logLine(ok ? "✓ Done." : "✗ Finished with errors.", "stdout");
+    btn.disabled = false;
+    refreshStatus();
+  });
+}
+
+loadConfig();
+refreshStatus();
+</script>
+</body>
+</html>

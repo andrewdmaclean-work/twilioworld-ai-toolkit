@@ -58,6 +58,75 @@ async function tryMcpAdd(command: string, args: string[], onLog: LogFn): Promise
   if (!res.ok) warn(`Could not run "${command} ${args.join(" ")}" — you can run it yourself later.`, onLog);
 }
 
+// ── Unified agent wiring ─────────────────────────────────────────────────
+// Every non-Pi agent (Claude Code, Codex, Cursor, OpenCode, GitHub Copilot)
+// follows the exact same shape, so the flow is identical no matter which
+// one you pick:
+//
+//   1. install the CLI (installVia brew→npm→curl), abort on failure
+//   2. wire Twilio Skills
+//   3. wire the Docs MCP
+//   4. wire the Execute MCP
+//   5. launch the CLI in a new terminal window
+//
+// The only per-agent differences are DATA, captured in AgentSpec below:
+// the binary name, install sources, docs URL, and the exact MCP-wiring /
+// Skills steps (each CLI genuinely has different syntax — Claude has
+// plugins + `mcp add`, Codex has `mcp add` with `--url`, Cursor/Copilot
+// wire MCP interactively, etc). Pi is intentionally NOT in this table: it's
+// a local agent that needs the model and launches via launchPi().
+
+interface AgentSpec {
+  /** Display name used in log messages. */
+  label: string;
+  /** Binary probed with have() and launched with openInNewWindow(). */
+  bin: string;
+  /** Install sources for installVia() (brew→npm→curl, first that works). */
+  install: { brew?: string[]; npm?: string[]; curl?: string };
+  /** Docs link shown if every install method fails. */
+  docsUrl: string;
+  /** First-run note appended to the successful-launch message (e.g. sign in / login). */
+  firstRunHint: string;
+  /** Wire Twilio Skills into this agent (best-effort; may just print steps). */
+  wireSkills?: (onLog: LogFn) => Promise<void> | void;
+  /** Wire the Docs MCP (best-effort; may just print steps). */
+  wireDocsMcp?: (onLog: LogFn) => Promise<void> | void;
+  /** Wire the Execute MCP (best-effort; may just print steps). */
+  wireExecuteMcp?: (mcpCreds: string, onLog: LogFn) => Promise<void> | void;
+}
+
+/** Runs the identical install → wire → launch sequence for any AgentSpec. */
+async function configureStandardAgent(
+  spec: AgentSpec,
+  mcpCreds: string,
+  onLog: LogFn,
+  onDone: (ok: boolean) => void,
+): Promise<void> {
+  // 1. Install (skip if already present, abort on failure).
+  if (have(spec.bin)) {
+    ok(`${spec.label} already installed  ${capture(spec.bin, ["--version"])}`, onLog);
+  } else {
+    warn(`${spec.label} not found — installing…`, onLog);
+    const installed = await installVia({ ...spec.install, onLog });
+    if (installed) ok(`${spec.label} installed`, onLog);
+    else { err(`Could not install ${spec.label} — see ${spec.docsUrl}`, onLog); onDone(false); return; }
+  }
+
+  // 2–4. Wire Skills / Docs MCP / Execute MCP per the user's add-on choices.
+  if (addonEnabled("twilioSkills")) await spec.wireSkills?.(onLog);
+  if (addonEnabled("docsMcp")) await spec.wireDocsMcp?.(onLog);
+  if (addonEnabled("executeMcp")) await spec.wireExecuteMcp?.(mcpCreds, onLog);
+
+  // 5. Launch in a new terminal window.
+  say("", onLog);
+  const launch = openInNewWindow(spec.bin, [], { cwd: ROOT });
+  if (launch.ok) ok(`${spec.label} opened in a new terminal window — ${spec.firstRunHint}`, onLog);
+  else { err(launch.error ?? "Could not open a new terminal window.", onLog); say(`   Run it yourself: cd ${ROOT} && ${spec.bin}`, onLog); }
+
+  onDone(true);
+}
+
+
 // opencode.json is a tracked file, committed with sensible static defaults
 // (twilio-docs on, twilio-execute off — matching the toolkit's own
 // defaults). This never writes to it; if the user's add-on choices
@@ -150,133 +219,108 @@ export async function configureAgent(opts: {
     warn("Local 2B model: keep the tool set small. For heavy MCP use, switch to a cloud /model inside Pi.", onLog);
 
   } else if (agent === "OpenCode") {
-    configureOpencodeMcpSelection(onLog);
-    if (have("opencode")) {
-      ok(`OpenCode already installed  ${capture("opencode", ["--version"])}`, onLog);
-    } else {
-      warn("OpenCode not found — installing…", onLog);
-      let installed = false;
-      if (have("brew")) {
-        const res = await runStreaming("brew", ["install", "anomalyco/tap/opencode"], { cwd: ROOT, onLog });
-        installed = res.ok;
-      }
-      if (!installed && have("npm")) {
-        const res = await runStreaming("npm", ["install", "-g", "opencode-ai"], { cwd: ROOT, onLog });
-        installed = res.ok;
-      }
-      if (installed) ok("OpenCode installed", onLog);
-      else err("Could not install OpenCode — see https://opencode.ai/docs", onLog);
-    }
-    say("", onLog);
-    say("   Launch from this directory:", onLog);
-    say(`       cd ${ROOT} && opencode`, onLog);
-    say("", onLog);
-    warn("Pick a real model for OpenCode — run /connect inside OpenCode and choose Anthropic, OpenAI, or Zen.", onLog);
-    if (mcpCreds) {
-      say("", onLog);
-      say("   To enable the Execute MCP, launch with your creds:", onLog);
-      say(`       TWILIO_MCP_CREDS="${mcpCreds}" opencode`, onLog);
-    }
+    // OpenCode is config-file driven for MCP (opencode.json), not `mcp add`,
+    // so its wireDocsMcp/wireExecuteMcp print the tracked-file override
+    // guidance via configureOpencodeMcpSelection rather than run a subcommand.
+    await configureStandardAgent(
+      {
+        label: "OpenCode",
+        bin: "opencode",
+        install: { brew: ["install", "anomalyco/tap/opencode"], npm: ["install", "-g", "opencode-ai"] },
+        docsUrl: "https://opencode.ai/docs",
+        firstRunHint: "run /connect there to pick a model (Anthropic, OpenAI, or Zen).",
+        wireSkills: () => ok("Twilio Skills use the Agent Skills standard — OpenCode reads them from ~/.agents/skills.", onLog),
+        wireDocsMcp: (l) => configureOpencodeMcpSelection(l),
+        wireExecuteMcp: (creds, l) => {
+          if (creds) { say("   To enable the Execute MCP, launch with your creds:", l); say(`       TWILIO_MCP_CREDS="${creds}" opencode`, l); }
+          else { say("   Add the Execute MCP once you have creds:", l); printExecuteOneliner(creds, l); }
+        },
+      },
+      mcpCreds, onLog, onDone,
+    );
+    return;
 
   } else if (agent === "Claude Code") {
-    if (have("claude")) {
-      ok(`Claude Code already installed  ${capture("claude", ["--version"])}`, onLog);
-    } else {
-      warn("Claude Code not found — installing…", onLog);
-      const installed = await installVia({
-        brew: ["install", "--cask", "claude-code"],
-        npm: ["install", "-g", "@anthropic-ai/claude-code"],
-        curl: "curl -fsSL https://claude.ai/install.sh | bash",
-        onLog,
-      });
-      if (installed) ok("Claude Code installed", onLog);
-      else { err("Could not install Claude Code — see https://code.claude.com/docs/en/quickstart", onLog); onDone(false); return; }
-    }
-
-    if (addonEnabled("twilioSkills")) {
-      say("   Installing the Twilio developer kit plugin…", onLog);
-      await tryMcpAdd("claude", ["plugin", "marketplace", "add", "https://github.com/twilio/ai"], onLog);
-      await tryMcpAdd("claude", ["plugin", "install", "twilio-developer-kit@twilio"], onLog);
-    }
-    if (addonEnabled("docsMcp")) {
-      say("   Adding the Docs MCP…", onLog);
-      await tryMcpAdd("claude", ["mcp", "add", "twilio-docs", "--transport", "http", DOCS_MCP_URL], onLog);
-    }
-    if (addonEnabled("executeMcp") && mcpCreds) {
-      say("   Adding the Execute MCP…", onLog);
-      await tryMcpAdd("claude", ["mcp", "add", "twilio-execute", "--", "npx", "-y", TWILIO_MCP_PKG, mcpCreds], onLog);
-    } else if (addonEnabled("executeMcp")) {
-      say("   Add the Execute MCP once you have creds:", onLog);
-      printExecuteOneliner(mcpCreds, onLog);
-      say(`       claude mcp add twilio-execute -- npx -y ${TWILIO_MCP_PKG} "ACxxx/SKxxx:secret"`, onLog);
-    }
-
-    say("", onLog);
-    const claudeLaunch = openInNewWindow("claude", [], { cwd: ROOT });
-    if (claudeLaunch.ok) ok("Claude Code opened in a new terminal window — sign in there if it's your first run.", onLog);
-    else { err(claudeLaunch.error ?? "Could not open a new terminal window.", onLog); say(`   Run it yourself: cd ${ROOT} && claude`, onLog); }
+    await configureStandardAgent(
+      {
+        label: "Claude Code",
+        bin: "claude",
+        install: { brew: ["install", "--cask", "claude-code"], npm: ["install", "-g", "@anthropic-ai/claude-code"], curl: "curl -fsSL https://claude.ai/install.sh | bash" },
+        docsUrl: "https://code.claude.com/docs/en/quickstart",
+        firstRunHint: "sign in there if it's your first run.",
+        wireSkills: async (l) => {
+          say("   Installing the Twilio developer kit plugin…", l);
+          await tryMcpAdd("claude", ["plugin", "marketplace", "add", "https://github.com/twilio/ai"], l);
+          await tryMcpAdd("claude", ["plugin", "install", "twilio-developer-kit@twilio"], l);
+        },
+        wireDocsMcp: async (l) => {
+          say("   Adding the Docs MCP…", l);
+          await tryMcpAdd("claude", ["mcp", "add", "twilio-docs", "--transport", "http", DOCS_MCP_URL], l);
+        },
+        wireExecuteMcp: async (creds, l) => {
+          if (creds) { say("   Adding the Execute MCP…", l); await tryMcpAdd("claude", ["mcp", "add", "twilio-execute", "--", "npx", "-y", TWILIO_MCP_PKG, creds], l); }
+          else { say("   Add the Execute MCP once you have creds:", l); printExecuteOneliner(creds, l); say(`       claude mcp add twilio-execute -- npx -y ${TWILIO_MCP_PKG} "ACxxx/SKxxx:secret"`, l); }
+        },
+      },
+      mcpCreds, onLog, onDone,
+    );
+    return;
 
   } else if (agent === "Cursor") {
-    if (have("cursor-agent")) {
-      ok(`Cursor CLI already installed  ${capture("cursor-agent", ["--version"])}`, onLog);
-    } else {
-      warn("Cursor CLI (cursor-agent) not found — installing…", onLog);
-      const installed = await installVia({
-        brew: ["install", "--cask", "cursor-cli"],
-        curl: "curl https://cursor.com/install -fsS | bash",
-        onLog,
-      });
-      if (installed) ok("Cursor CLI installed", onLog);
-      else { err("Could not install the Cursor CLI — see https://cursor.com/docs/cli", onLog); onDone(false); return; }
-    }
-
-    say("   In Cursor Composer or the CLI, install the plugin:", onLog);
-    say("       /add-plugin twilio-developer-kit", onLog);
-    say("   Add Execute MCP under Cursor Settings > MCP, or run:", onLog);
-    printExecuteOneliner(mcpCreds, onLog);
-
-    say("", onLog);
-    const cursorLaunch = openInNewWindow("cursor-agent", [], { cwd: ROOT });
-    if (cursorLaunch.ok) ok("Cursor CLI opened in a new terminal window — sign in there if it's your first run.", onLog);
-    else { err(cursorLaunch.error ?? "Could not open a new terminal window.", onLog); say(`   Run it yourself: cd ${ROOT} && cursor-agent`, onLog); }
+    await configureStandardAgent(
+      {
+        label: "Cursor CLI",
+        bin: "cursor-agent",
+        install: { brew: ["install", "--cask", "cursor-cli"], curl: "curl https://cursor.com/install -fsS | bash" },
+        docsUrl: "https://cursor.com/docs/cli",
+        firstRunHint: "sign in there if it's your first run.",
+        wireSkills: (l) => { say("   In Cursor Composer or the CLI, install the plugin:", l); say("       /add-plugin twilio-developer-kit", l); },
+        wireDocsMcp: (l) => { say("   Add the Docs MCP under Cursor Settings > MCP:", l); say(`       type: http   url: ${DOCS_MCP_URL}`, l); },
+        wireExecuteMcp: (creds, l) => { say("   Add the Execute MCP under Cursor Settings > MCP, or run:", l); printExecuteOneliner(creds, l); },
+      },
+      mcpCreds, onLog, onDone,
+    );
+    return;
 
   } else if (agent === "Codex") {
-    if (have("codex")) {
-      ok(`Codex already installed  ${capture("codex", ["--version"])}`, onLog);
-    } else {
-      warn("Codex not found — installing…", onLog);
-      const installed = await installVia({
-        brew: ["install", "codex"],
-        npm: ["install", "-g", "@openai/codex"],
-        curl: "curl -fsSL https://chatgpt.com/codex/install.sh | sh",
-        onLog,
-      });
-      if (installed) ok("Codex installed", onLog);
-      else { err("Could not install Codex — see https://developers.openai.com/codex/cli", onLog); onDone(false); return; }
-    }
+    await configureStandardAgent(
+      {
+        label: "Codex",
+        bin: "codex",
+        install: { brew: ["install", "codex"], npm: ["install", "-g", "@openai/codex"], curl: "curl -fsSL https://chatgpt.com/codex/install.sh | sh" },
+        docsUrl: "https://developers.openai.com/codex/cli",
+        firstRunHint: "sign in there if it's your first run.",
+        wireSkills: (l) => {
+          say("   In Codex, open Plugins and install \"Twilio developer kit\" (Codex plugin", l);
+          say("   marketplaces aren't auto-wired by this toolkit yet).", l);
+          say("       /plugins", l);
+        },
+        wireDocsMcp: async (l) => { say("   Adding the Docs MCP…", l); await tryMcpAdd("codex", ["mcp", "add", "twilio-docs", "--url", DOCS_MCP_URL], l); },
+        wireExecuteMcp: async (creds, l) => {
+          if (creds) { say("   Adding the Execute MCP…", l); await tryMcpAdd("codex", ["mcp", "add", "twilio-execute", "--", "npx", "-y", TWILIO_MCP_PKG, creds], l); }
+          else { say("   Add the Execute MCP once you have creds:", l); printExecuteOneliner(creds, l); say(`       codex mcp add twilio-execute -- npx -y ${TWILIO_MCP_PKG} "ACxxx/SKxxx:secret"`, l); }
+        },
+      },
+      mcpCreds, onLog, onDone,
+    );
+    return;
 
-    if (addonEnabled("twilioSkills")) {
-      say("   In Codex, open Plugins and install \"Twilio developer kit\" (Codex plugin", onLog);
-      say("   marketplaces aren't auto-wired by this toolkit yet).", onLog);
-      say("       /plugins", onLog);
-    }
-    if (addonEnabled("docsMcp")) {
-      say("   Adding the Docs MCP…", onLog);
-      await tryMcpAdd("codex", ["mcp", "add", "twilio-docs", "--url", DOCS_MCP_URL], onLog);
-    }
-    if (addonEnabled("executeMcp") && mcpCreds) {
-      say("   Adding the Execute MCP…", onLog);
-      await tryMcpAdd("codex", ["mcp", "add", "twilio-execute", "--", "npx", "-y", TWILIO_MCP_PKG, mcpCreds], onLog);
-    } else if (addonEnabled("executeMcp")) {
-      say("   Add the Execute MCP once you have creds:", onLog);
-      printExecuteOneliner(mcpCreds, onLog);
-      say(`       codex mcp add twilio-execute -- npx -y ${TWILIO_MCP_PKG} "ACxxx/SKxxx:secret"`, onLog);
-    }
-
-    say("", onLog);
-    const codexLaunch = openInNewWindow("codex", [], { cwd: ROOT });
-    if (codexLaunch.ok) ok("Codex opened in a new terminal window — sign in there if it's your first run.", onLog);
-    else { err(codexLaunch.error ?? "Could not open a new terminal window.", onLog); say(`   Run it yourself: cd ${ROOT} && codex`, onLog); }
+  } else if (agent === "GitHub Copilot") {
+    await configureStandardAgent(
+      {
+        label: "GitHub Copilot CLI",
+        bin: "copilot",
+        install: { brew: ["install", "--cask", "copilot-cli"], npm: ["install", "-g", "@github/copilot"], curl: "curl -fsSL https://gh.io/copilot-install | bash" },
+        docsUrl: "https://docs.github.com/copilot/how-tos/set-up/install-copilot-cli",
+        firstRunHint: "run /login there if it's your first run.",
+        wireSkills: (l) => ok("Twilio Skills use the Agent Skills standard — Copilot CLI reads them from ~/.agents/skills.", l),
+        // Copilot manages MCP interactively via /mcp (no stable subcommand).
+        wireDocsMcp: (l) => { say("   Add the Docs MCP inside Copilot with the /mcp command:", l); say(`       name: twilio-docs   type: http   url: ${DOCS_MCP_URL}`, l); },
+        wireExecuteMcp: (creds, l) => { say("   Add the Execute MCP inside Copilot with the /mcp command (local/stdio):", l); printExecuteOneliner(creds, l); },
+      },
+      mcpCreds, onLog, onDone,
+    );
+    return;
 
   } else {
     // Other / Bring my own

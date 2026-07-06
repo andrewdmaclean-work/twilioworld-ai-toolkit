@@ -16,6 +16,7 @@ const AGENT_OPTIONS = [
   { name: "Codex",                 description: "OpenAI's CLI agent — toolkit installs + launches it for you",   value: "Codex" },
   { name: "Cursor",                description: "Cursor's CLI agent — toolkit installs + launches it for you",   value: "Cursor" },
   { name: "OpenCode",              description: "Open-source coding agent — toolkit installs it for you",        value: "OpenCode" },
+  { name: "GitHub Copilot",        description: "GitHub's CLI agent — toolkit installs + launches it for you",   value: "GitHub Copilot" },
   { name: "Pi",                    description: "Local agent — toolkit installs + runs it for you",               value: "Pi (lightweight TUI)" },
   { name: "Other / Bring my own",  description: "Manual MCP wiring instructions",                                 value: "Other / Bring my own" },
 ];
