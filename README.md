@@ -105,7 +105,7 @@ disappear from the menu.
 | **Twilio Skills** | 48+ skill files that teach your agent which Twilio product to use, in what order, and what to avoid. |
 | **Docs MCP** | Your agent searches the live Twilio API surface (1,800+ endpoints) and pulls exact schemas. No auth. |
 | **Execute MCP** *(experimental)* | Your agent **calls real Twilio APIs** — "send a text to my phone" just works. Uses a scoped API key. |
-| **Gemma 4 E2B (local)** | A free, offline model via [llamafile](https://github.com/mozilla-ai/llamafile). Serves an OpenAI-compatible API on `:8080` — powers in-app chat and, if selected, Pi. |
+| **Gemma 4 E2B (local)** | A free, offline model via [llamafile](https://github.com/mozilla-ai/llamafile). Serves an OpenAI-compatible API on `:8080` by default — powers in-app chat and, if selected, Pi. |
 | **Twilio CLI** | The command line to all things Twilio, logged in and ready. |
 | **Dev Phone** | A browser soft phone — make/receive real SMS + voice with no physical device. |
 | **Pi** *(one of several agent options)* | [Pi](https://pi.dev) is the one agent the toolkit can fully install, wire, and launch for you — Configure agent → Pi does everything in one step. |
@@ -119,7 +119,7 @@ what gets installed locally and what gets attached when you configure an agent:
 
 | Choice | What it does | Default |
 | --- | --- | --- |
-| Local Gemma model | Required for Chat with Twilio; also serves `http://127.0.0.1:8080/v1` for other tools (including Pi) | ✓ on |
+| Local Gemma model | Required for Chat with Twilio; also serves `http://127.0.0.1:8080/v1` by default for other tools (including Pi) | ✓ on |
 | Twilio Skills for agents | Installs Twilio Skills where coding agents can find them | ✓ on |
 | Docs MCP for agents | Adds searchable live Twilio API reference to configured agents | ✓ on |
 | Execute MCP for agents | Lets configured agents call real Twilio APIs | off |
@@ -316,6 +316,7 @@ Skills (make them global):
 
 Local model (OpenAI-compatible):
     http://127.0.0.1:8080/v1   (choose Model server in the TUI after Setup)
+    # If 8080 is already used: MODEL_SERVER_PORT=8082 ./toolkit
 ```
 
 Verified-compatible: Claude Code, Cursor, Codex, OpenCode, Pi, GitHub Copilot,
@@ -327,6 +328,7 @@ Gemini CLI, JetBrains Junie, and 30+ more.
 
 ```bash
 ./toolkit                   # choose "Chat with Twilio" or "Model server"
+MODEL_SERVER_PORT=8082 ./toolkit  # avoid a local 8080 conflict
 CTX_SIZE=65536 ./toolkit    # even more headroom for long multi-tool sessions
 ```
 
@@ -334,13 +336,14 @@ Powered by [llamafile](https://github.com/mozilla-ai/llamafile) (Mozilla) — a 
 executable. The TUI starts the local OpenAI-compatible server in the background and
 renders chat inside the OpenTUI dashboard, so the toolkit does not appear to exit
 when you choose **Chat with Twilio**. Tools (OpenCode, Cursor, etc.) can connect
-to `http://127.0.0.1:8080/v1` at the same time.
+to `http://127.0.0.1:8080/v1` at the same time, or to
+`http://127.0.0.1:$MODEL_SERVER_PORT/v1` if you override the port.
 
-### The built-in web UI on `:8080`
+### The Built-In Web UI
 
 llamafile is Mozilla's packaging of [llama.cpp](https://github.com/ggml-org/llama.cpp)'s
 server, so when the model server is running it exposes **two things on the same
-port 8080**:
+port**:
 
 | Path | What it is | Who uses it |
 | --- | --- | --- |
@@ -354,13 +357,13 @@ it: the Twilio Docs MCP server is wired in and a Twilio-aware system message is
 set, so it behaves like a Twilio-aware assistant from the first message — no
 manual Settings navigation required. Use **Chat with Twilio** in the TUI (or a
 configured agent) for the toolkit's full tool surface (Skills, status/config
-introspection); use the web UI at `:8080/` when you want that Twilio-aware
+introspection); use the web UI at the model server root when you want that Twilio-aware
 assistant in a plain browser tab instead.
 
 > The web UI binds to `127.0.0.1` only — it is not exposed off your machine. If you
-> run the model server inside one of the `demo/` GUI containers, note that noVNC
-> also historically used 8080; the demo containers serve noVNC on a different port
-> so the two don't collide (see each `demo/*/README.md`).
+> run the model server inside one of the `demo/` GUI containers, noVNC owns
+> container port 8080. Those images set `MODEL_SERVER_PORT=8082` so the two
+> services do not collide (see each `demo/*/README.md`).
 
 ### Setting up the Twilio MCP server inside the web UI (experimental)
 

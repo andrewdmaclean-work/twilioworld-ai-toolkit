@@ -8,6 +8,7 @@ import { writeConfig, readConfig, type AddonKey } from "../lib/config.ts";
 import { runSetup } from "../lib/setup.ts";
 import { THEME } from "../theme.ts";
 import { buildEmbeddedRouteChrome, removeAllChildren } from "./chrome.ts";
+import { createInputGuard } from "./input-guard.ts";
 import { buildLogScreen } from "./log.ts";
 
 type SetupItem = CheckItem & { key: AddonKey | `__${string}` };
@@ -62,9 +63,11 @@ export function buildSetupScreen(
     selectedBackgroundColor: THEME.bgSelected,
     selectedTextColor: THEME.white,
     descriptionColor: THEME.dim2,
-    selectedDescriptionColor: THEME.silver,
+      selectedDescriptionColor: THEME.silver,
   });
+  const confirmGuard = createInputGuard();
   confirmSelect.on(SelectRenderableEvents.ITEM_SELECTED, (index) => {
+    if (!confirmGuard.ready()) return;
     confirmLabel.visible = false;
     confirmSelect.visible = false;
     if (index === 0) {
@@ -108,7 +111,9 @@ export function buildSetupScreen(
     checklist.container.visible = false;
     confirmLabel.visible = true;
     confirmSelect.visible = true;
+    confirmSelect.setSelectedIndex(1);
     confirmSelect.focus();
+    confirmGuard.arm();
   };
   checklist.onCancel = () => onCancel();
   checklist.focus();

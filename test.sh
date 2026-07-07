@@ -86,6 +86,13 @@ check "pi-mcp has eager lifecycle"    grep -q 'eager' tui/src/lib/pi-mcp.ts
 check "pi-mcp has execute mcp guard"  grep -q 'TWILIO_MCP_CREDS' tui/src/lib/pi-mcp.ts
 check "model.ts has server args"      grep -q 'serverArgs\|--server' tui/src/lib/model.ts
 check "model starts with reasoning enabled" bash -c 'grep -q "\"--reasoning\", \"auto\"" tui/src/lib/model.ts && grep -q "\"--reasoning-budget\", \"-1\"" tui/src/lib/model.ts'
+check "model port is configurable end-to-end" bash -c '
+  grep -q "MODEL_SERVER_PORT" tui/src/lib/constants.ts &&
+  grep -q "MODEL_SERVER_BASE_URL" tui/src/lib/constants.ts &&
+  grep -q "MODEL_SERVER_PORT" tui/src/lib/model.ts &&
+  grep -q "MODEL_SERVER_PORT" tui/src/lib/exec.ts &&
+  grep -q "MODEL_SERVER_PORT" tui/src/screens/chat.ts
+'
 check "voice module uses whisperfile" bash -c 'grep -q "transcribeVoiceFile" tui/src/lib/voice.ts && grep -q "WHISPERFILE_DEST" tui/src/lib/voice.ts'
 check "voice uses documented whisper args" bash -c 'grep -q "\"-m\", q(WHISPER_MODEL_DEST)" tui/src/lib/voice.ts && grep -q "\"--no-prints\"" tui/src/lib/voice.ts'
 check "voice input is gated coming soon" bash -c 'grep -q "VOICE_COMING_SOON" tui/src/lib/voice.ts && grep -q "Whisper model is not bundled yet" tui/src/lib/voice.ts'
@@ -165,6 +172,37 @@ check "OpenCode no longer print-only (launches like the rest)" bash -c '
 check "index uses openInNewWindow"    bash -c 'grep -q "openInNewWindow" tui/src/lib/actions.ts && grep -q "openInNewWindow" tui/src/lib/pi.ts'
 check "no suspend/resume left in index" bash -c '! grep -q "renderer.suspend\|renderer.resume" tui/src/index.ts'
 check "exec.ts has new-window opener" grep -q 'export function openInNewWindow' tui/src/lib/exec.ts
+check "URL opener works in GUI containers" bash -c '
+  grep -q "chromium-launch" tui/src/lib/exec.ts &&
+  grep -q "No DISPLAY found" tui/src/lib/exec.ts &&
+  grep -q "xdg-utils" demo/raspbian/Dockerfile &&
+  grep -q "xdg-utils" demo/desktop/Dockerfile
+'
+check "shell prompts read from terminal" bash -c '
+  grep -q "ask_install_node" toolkit &&
+  grep -q "/dev/tty" toolkit &&
+  grep -q "/dev/tty" uninstall.sh &&
+  grep -q "\[y/n\]" toolkit &&
+  grep -q "\[y/n\]" uninstall.sh &&
+  ! grep -RIn "read -r -p" toolkit uninstall.sh 2>/dev/null
+'
+check "setup subprocesses cannot consume TUI input" grep -q 'stdio: \["ignore", "pipe", "pipe"\]' tui/src/lib/exec.ts
+check "confirm screens ignore carried enter" bash -c '
+  grep -q "createInputGuard" tui/src/screens/input-guard.ts &&
+  grep -q "confirmGuard.ready()" tui/src/screens/setup.ts &&
+  grep -q "confirmGuard.ready()" tui/src/screens/uninstall.ts &&
+  grep -q "setSelectedIndex(1)" tui/src/screens/setup.ts &&
+  grep -q "setSelectedIndex(selected.length ? 1 : 0)" tui/src/screens/uninstall.ts
+'
+check "route transitions ignore carried enter" bash -c '
+  grep -q "selectGuard.ready()" tui/src/screens/submenu.ts &&
+  grep -q "selectGuard.ready()" tui/src/screens/agent.ts
+'
+check "log dismissal uses explicit keys" bash -c '
+  grep -q "isDismissKey" tui/src/screens/log.ts &&
+  grep -q "Enter, Escape, Space, or q" tui/src/screens/log.ts &&
+  ! grep -q "press any key" tui/src/screens/log.ts
+'
 check "no gum references remain"      bash -c '! grep -RIn "\bgum\b" README.md uninstall.sh tui/src tui/package.json 2>/dev/null'
 check "no plain UI fallback remains"  bash -c '! grep -RIn "src/plain\|TOOLKIT_PLAIN\|--plain" toolkit tui/src tui/package.json 2>/dev/null'
 check "no legacy route purple remains" bash -c '! grep -RIn "C084FC\|3B2A52" tui/src 2>/dev/null'
@@ -182,6 +220,19 @@ check "C-2/H-1/H-2 creds written chmod 600, not printed" bash -c 'grep -q "write
 check "C-3 extraction uses mkdtemp, not predictable path" bash -c 'grep -q "mkdtempSync" tui/src/lib/setup.ts && ! grep -q "extract_tmp" tui/src/lib/setup.ts'
 check "C-4 creds format validated"    grep -q 'looksLikeMcpCreds' tui/src/lib/setup.ts
 check "M-1 PORT/CTX_SIZE validated"   grep -q 'validDigits' tui/src/lib/model.ts
+check "demo desktops avoid model/noVNC port collision" bash -c '
+  grep -q "MODEL_SERVER_PORT=8082" demo/raspbian/Dockerfile &&
+  grep -q "MODEL_SERVER_PORT=8082" demo/desktop/Dockerfile &&
+  grep -q "CTX_SIZE=8192" demo/raspbian/Dockerfile &&
+  grep -q "CTX_SIZE=8192" demo/desktop/Dockerfile
+'
+check "demo desktops include process diagnostics" bash -c '
+  grep -q "procps" demo/raspbian/Dockerfile &&
+  grep -q "iproute2" demo/raspbian/Dockerfile &&
+  grep -q "procps" demo/desktop/Dockerfile &&
+  grep -q "iproute2" demo/desktop/Dockerfile
+'
+check "raspbian noVNC binds localhost by default" grep -q '127.0.0.1:8081:8080' demo/raspbian/README.md
 check "M-2 umask set in setup"        grep -q 'process.umask' tui/src/lib/setup.ts
 check "L-1 pi package version pinned" grep -q 'PI_AGENT_PKG = "@earendil-works/pi-coding-agent@' tui/src/lib/constants.ts
 

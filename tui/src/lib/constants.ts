@@ -4,6 +4,10 @@ import { join } from "path";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
 
+function validPort(raw: string | undefined, fallback: string): string {
+  return raw && /^[0-9]+$/.test(raw) ? raw : fallback;
+}
+
 const TUI_DIR = dirname(dirname(dirname(fileURLToPath(import.meta.url)))); // tui/
 export const ROOT = dirname(TUI_DIR); // repo root
 
@@ -68,7 +72,9 @@ export const WHISPER_MODEL_STAGING = join(MODELS_DIR, "whisper-tiny.en-q5_1.down
 export const WHISPER_MODEL_MIN_BYTES = 20_000_000;
 export const VOICE_TMP_DIR = join(MODELS_DIR, "voice");
 
-export const MODEL_SERVER_URL = "http://127.0.0.1:8080/v1/models";
+export const MODEL_SERVER_PORT = validPort(process.env.MODEL_SERVER_PORT ?? process.env.PORT, "8080");
+export const MODEL_SERVER_BASE_URL = `http://127.0.0.1:${MODEL_SERVER_PORT}`;
+export const MODEL_SERVER_URL = `${MODEL_SERVER_BASE_URL}/v1/models`;
 export const MODEL_SERVER_LOG = join(MODELS_DIR, "pi-server.log");
 
 // ── MCP proxy bridge ─────────────────────────────────────────────────

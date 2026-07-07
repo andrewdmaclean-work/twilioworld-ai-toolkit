@@ -9,9 +9,10 @@ import { capture, fileExecutable, have, openInNewWindow, runStreaming, startDaem
 import { addonEnabled } from "./config.ts";
 import {
   GGUF_DEST,
-  GGUF_MIN_BYTES,
-  LLAMAFILE_DEST,
-  MODEL_SERVER_URL,
+    GGUF_MIN_BYTES,
+    LLAMAFILE_DEST,
+    MODEL_SERVER_PORT,
+    MODEL_SERVER_URL,
   PI_AGENT_DIR,
   PI_MODELS_JSON,
   PI_ROUTING_PROMPT,
@@ -97,7 +98,7 @@ export async function launchPi(opts: { onLog: LogFn }): Promise<NewWindowResult>
     if (!isModelServerRunning()) {
       onLog("⚠  Gemma service did not respond yet — Pi may be slow to start.", "stderr");
     } else {
-      onLog("✓ Gemma service ready on :8080", "stdout");
+      onLog(`✓ Gemma service ready on :${MODEL_SERVER_PORT}`, "stdout");
     }
   }
 

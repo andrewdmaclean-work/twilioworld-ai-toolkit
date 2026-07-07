@@ -9,6 +9,7 @@ import {
 import { configureAgent } from "../lib/configure-agent.ts";
 import { THEME } from "../theme.ts";
 import { buildEmbeddedRouteChrome, removeAllChildren } from "./chrome.ts";
+import { createInputGuard } from "./input-guard.ts";
 import { buildLogScreen } from "./log.ts";
 
 const AGENT_OPTIONS = [
@@ -51,7 +52,9 @@ export function buildAgentScreen(
     selectedDescriptionColor: THEME.silver,
   });
 
+  const selectGuard = createInputGuard();
   select.on(SelectRenderableEvents.ITEM_SELECTED, (_, option) => {
+    if (!selectGuard.ready()) return;
     const agentValue = option.value as string;
     const logScreen = buildLogScreen(
       renderer,
@@ -72,6 +75,7 @@ export function buildAgentScreen(
 
   body.add(select);
   select.focus();
+  selectGuard.arm();
 
   return screen;
 }

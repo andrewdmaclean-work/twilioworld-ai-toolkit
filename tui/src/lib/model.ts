@@ -10,6 +10,7 @@ import {
   GGUF_MIN_BYTES,
   GGUF_MMPROJ,
   LLAMAFILE_DEST,
+  MODEL_SERVER_PORT,
   MODEL_SERVER_URL,
   WEBUI_CONFIG_FILE,
 } from "./constants.ts";
@@ -28,7 +29,7 @@ function validDigits(raw: string | undefined, fallback: string): string {
 }
 
 const CTX_SIZE = validDigits(process.env.CTX_SIZE, "32768");
-const PORT = validDigits(process.env.PORT, "8080");
+const PORT = MODEL_SERVER_PORT;
 
 export { LLAMAFILE_DEST };
 

@@ -5,7 +5,7 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { capture, have, openInNewWindow, runStreaming, type LogFn } from "./exec.ts";
-import { CONFIG_DIR, DOCS_MCP_URL, PI_AGENT_PKG, ROOT, TWILIO_MCP_PKG } from "./constants.ts";
+import { CONFIG_DIR, DOCS_MCP_URL, MODEL_SERVER_BASE_URL, PI_AGENT_PKG, ROOT, TWILIO_MCP_PKG } from "./constants.ts";
 import { launchPi } from "./pi.ts";
 import { pathNodeVersion, supportsPiNode } from "./node-version.ts";
 
@@ -340,7 +340,7 @@ export async function configureAgent(opts: {
     say(`      cp -r "${join(ROOT, "vendor", "twilio-ai", "skills")}" ~/.agents/skills/`, onLog);
     say("", onLog);
     say("  Local model (OpenAI-compatible):", onLog);
-    say("      http://127.0.0.1:8080/v1   (launch from menu → Chat or Model server)", onLog);
+    say(`      ${MODEL_SERVER_BASE_URL}/v1   (launch from menu → Chat or Model server)`, onLog);
     say("", onLog);
     say("  Works with Copilot, Gemini CLI, JetBrains Junie + 30 more.", onLog);
   }

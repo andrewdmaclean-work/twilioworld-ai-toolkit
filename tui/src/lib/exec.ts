@@ -25,7 +25,7 @@ import { existsSync, writeFileSync } from "fs";
 import { execSync } from "child_process";
 import { tmpdir } from "os";
 import { join } from "path";
-import { MCP_PROXY_PORT, MCP_PROXY_SCRIPT } from "./constants.ts";
+import { MCP_PROXY_PORT, MCP_PROXY_SCRIPT, MODEL_SERVER_PORT } from "./constants.ts";
 
 export type LogFn = (line: string, stream: "stdout" | "stderr") => void;
 
@@ -111,16 +111,19 @@ export function openUrl(url: string): NewWindowResult {
       spawn("cmd.exe", ["/c", "start", "", url], { stdio: "ignore", detached: true }).unref();
       return { ok: true };
     }
-    const openers = ["xdg-open", "gio"];
+    if (!process.env.DISPLAY) {
+      return { ok: false, error: "No DISPLAY found. Open quicklinks from a terminal inside the VNC desktop." };
+    }
+    const openers = ["chromium-launch", "xdg-open", "gio", "sensible-browser", "epiphany-browser", "chromium", "chromium-browser"];
     for (const opener of openers) {
       if (!have(opener)) continue;
       const args = opener === "gio" ? ["open", url] : [url];
       spawn(opener, args, { stdio: "ignore", detached: true }).unref();
       return { ok: true };
     }
-    return { ok: false, error: "No browser opener found. Visit https://twilio.world manually." };
+    return { ok: false, error: `No browser opener found. Visit ${url} manually.` };
   } catch (e) {
-    return { ok: false, error: `Could not open https://twilio.world: ${(e as Error).message}` };
+    return { ok: false, error: `Could not open ${url}: ${(e as Error).message}` };
   }
 }
 
@@ -352,6 +355,6 @@ function killMcpProxy(): void {
  * llamafile's --ui-config-file (see serverArgs() in model.ts), so there's
  * nothing to inject client-side — just open the page.
  */
-export function openLlamaWebUi(port = 8080): NewWindowResult {
+export function openLlamaWebUi(port = Number(MODEL_SERVER_PORT)): NewWindowResult {
   return openUrl(`http://127.0.0.1:${port}/`);
 }

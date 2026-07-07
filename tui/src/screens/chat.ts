@@ -7,7 +7,7 @@ import {
   type CliRenderer,
 } from "@opentui/core";
 import { modelReady, modelRunning, serverArgs } from "../lib/model.ts";
-import { LLAMAFILE_DEST, MODEL_SERVER_URL, ROOT } from "../lib/constants.ts";
+import { LLAMAFILE_DEST, MODEL_SERVER_PORT, MODEL_SERVER_URL, ROOT } from "../lib/constants.ts";
 import { startDaemon } from "../lib/exec.ts";
 import { CHAT_TOOLS, runChatTool, type ToolCall } from "../lib/chat-tools.ts";
 import {
@@ -213,12 +213,12 @@ export function buildChatScreen(renderer: CliRenderer, onCancel: () => void): Bo
       footer.fg = THEME.yellow;
       return false;
     }
-    footer.content = "  Starting local model server on :8080...";
+    footer.content = `  Starting local model server on :${MODEL_SERVER_PORT}...`;
     footer.fg = THEME.yellow;
     startDaemon(LLAMAFILE_DEST, serverArgs(), { cwd: ROOT });
     serverReady = await waitForServer();
     footer.content = serverReady
-      ? "  Enter send    PageUp/PageDown scroll    Server :8080 ready"
+      ? `  Enter send    PageUp/PageDown scroll    Server :${MODEL_SERVER_PORT} ready`
       : "  Model server did not respond yet. Try again in a moment.";
     footer.fg = serverReady ? THEME.dim : THEME.yellow;
     return serverReady;

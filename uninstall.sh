@@ -22,7 +22,28 @@ cd "$ROOT" || exit 1
 ok()   { printf '   \033[32m✓\033[0m %s\n' "$*"; }
 warn() { printf '   \033[33m⚠\033[0m  %s\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
-ask()  { read -r -p "$1 [y/N] " a; [[ "$a" =~ ^[Yy]$ ]]; }
+
+ask() {
+  local answer
+  while true; do
+    if [[ -r /dev/tty && -w /dev/tty ]]; then
+      printf '%s [y/n] ' "$1" >/dev/tty
+      read -r answer </dev/tty
+    elif [[ -t 0 ]]; then
+      printf '%s [y/n] ' "$1"
+      read -r answer
+    else
+      warn "Cannot prompt: stdin is not interactive. Skipping: $1"
+      return 1
+    fi
+
+    case "$answer" in
+      [Yy]) return 0 ;;
+      [Nn]) return 1 ;;
+      *) warn "Please type y or n." ;;
+    esac
+  done
+}
 
 find_toolkit_key_sid() {
   local json

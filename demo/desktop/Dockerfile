@@ -43,16 +43,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       tigervnc-standalone-server \
       tigervnc-common \
       novnc \
-      websockify \
-      dbus-x11 \
-      sudo \
+	      websockify \
+	      dbus-x11 \
+	      procps \
+	      iproute2 \
+	      sudo \
       bash \
       git \
-      curl \
-      ca-certificates \
-      unzip \
-      xterm \
-      epiphany-browser \
+	      curl \
+	      ca-certificates \
+	      unzip \
+	      xdg-utils \
+	      xterm \
+	      epiphany-browser \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -78,6 +81,11 @@ RUN mkdir -p /home/demo/.vnc && \
 USER root
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# noVNC owns :8080 in this desktop container; keep the local model server on
+# a separate loopback port and reduce context for memory-capped demo runs.
+ENV MODEL_SERVER_PORT=8082 \
+    CTX_SIZE=8192
 
 VOLUME ["/demo_files"]
 EXPOSE 8080

@@ -11,6 +11,7 @@ import { CheckList, type CheckItem } from "../checklist.ts";
 import { runUninstall, type UninstallKey } from "../lib/uninstall.ts";
 import { THEME } from "../theme.ts";
 import { buildEmbeddedRouteChrome, removeAllChildren } from "./chrome.ts";
+import { createInputGuard } from "./input-guard.ts";
 import { buildLogScreen } from "./log.ts";
 
 type UninstallItem = CheckItem & { key: UninstallKey | `__${string}` };
@@ -81,6 +82,8 @@ export function buildUninstallScreen(
   });
 
   let selected: UninstallKey[] = [];
+  const confirmGuard = createInputGuard();
+
   function showChecklist(): void {
     warning.visible = true;
     checklist.container.visible = true;
@@ -90,6 +93,7 @@ export function buildUninstallScreen(
   }
 
   confirmSelect.on(SelectRenderableEvents.ITEM_SELECTED, (index) => {
+    if (!confirmGuard.ready()) return;
     if (index !== 0 || !selected.length) {
       showChecklist();
       return;
@@ -135,8 +139,9 @@ export function buildUninstallScreen(
     checklist.container.visible = false;
     confirmLabel.visible = true;
     confirmSelect.visible = true;
-    confirmSelect.setSelectedIndex(0);
+    confirmSelect.setSelectedIndex(selected.length ? 1 : 0);
     confirmSelect.focus();
+    confirmGuard.arm();
   };
   checklist.onCancel = () => onCancel();
   checklist.focus();

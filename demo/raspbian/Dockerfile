@@ -76,15 +76,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       tigervnc-common \
       novnc \
       websockify \
-      dbus-x11 \
-      sudo \
+	      dbus-x11 \
+	      procps \
+	      iproute2 \
+	      sudo \
       bash \
       git \
-      curl \
-      ca-certificates \
-      unzip \
-      xterm \
-    && apt-get clean \
+	      curl \
+	      ca-certificates \
+	      unzip \
+	      xdg-utils \
+	      xterm \
+	    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # ── UTF-8 locale ─────────────────────────────────────────────────────────
@@ -100,6 +103,12 @@ RUN sed -i 's/^# *\(en_US.UTF-8 UTF-8\)/\1/' /etc/locale.gen \
 ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US:en \
     LC_ALL=en_US.UTF-8
+
+# noVNC owns :8080 in this desktop container. Run the local llamafile server
+# on a separate loopback port, and keep the context smaller so the model has a
+# realistic chance under the Pi 4-style 4GB memory cap plus desktop overhead.
+ENV MODEL_SERVER_PORT=8082 \
+    CTX_SIZE=8192
 
 # ── Non-root desktop user (matches the classic Pi "pi" user idea) ────────
 RUN useradd -m -s /bin/bash pi \

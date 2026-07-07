@@ -13,6 +13,7 @@ import {
 } from "@opentui/core";
 import { THEME } from "../theme.ts";
 import { buildEmbeddedRouteChrome } from "./chrome.ts";
+import { createInputGuard } from "./input-guard.ts";
 
 export interface SubmenuOption {
   name: string;
@@ -59,7 +60,9 @@ export function buildSubmenuScreen(
     selectedDescriptionColor: THEME.silver,
   });
 
+  const selectGuard = createInputGuard();
   select.on(SelectRenderableEvents.ITEM_SELECTED, (_, option) => {
+    if (!selectGuard.ready()) return;
     const idx = parseInt(option.value as string, 10);
     const choice = opts.options[idx];
     if (!choice) return;
@@ -77,6 +80,7 @@ export function buildSubmenuScreen(
 
   body.add(select);
   select.focus();
+  selectGuard.arm();
 
   return screen;
 }

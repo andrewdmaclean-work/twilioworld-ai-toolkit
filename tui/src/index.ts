@@ -28,7 +28,7 @@ import { loadToolkitEnv } from "./lib/env.ts";
 import { runUninstall, type UninstallKey } from "./lib/uninstall.ts";
 import { buildInvadersScreen } from "./screens/invaders.ts";
 import {
-  LLAMAFILE_DEST, ROOT, MODEL_SERVER_URL, CONFIG_FILE,
+  LLAMAFILE_DEST, ROOT, MODEL_SERVER_PORT, MODEL_SERVER_URL, CONFIG_FILE,
 } from "./lib/constants.ts";
 import { serverArgs, modelReady } from "./lib/model.ts";
 import { openUrl, openLlamaWebUi, startMcpProxy, capture, have, startDaemon } from "./lib/exec.ts";
@@ -159,7 +159,7 @@ function statusLines(s: ToolkitStatus | null) {
   const lines: Array<{ text: string; fg: string }> = [];
 
   // Running now (green).
-  if (s.model.running) lines.push(ok("Local model", "running on :8080"));
+  if (s.model.running) lines.push(ok("Local model", `running on :${MODEL_SERVER_PORT}`));
   if (process.env.TWILIO_MCP_CREDS) lines.push(ok("Execute MCP", "creds loaded"));
 
   // Installed but idle (dim) — only shown when present, no dashes for absent.
@@ -710,7 +710,7 @@ async function main() {
           startMcpProxy();
           if (!Boolean(capture("curl", ["-fsS", MODEL_SERVER_URL]))) {
             startDaemon(LLAMAFILE_DEST, serverArgs(), { cwd: ROOT });
-            flash("Starting model server on :8080…", GREEN);
+            flash(`Starting model server on :${MODEL_SERVER_PORT}…`, GREEN);
             setTimeout(() => { poll(); openLlamaWebUi(); }, 3000);
           } else {
             openLlamaWebUi();
@@ -751,7 +751,7 @@ async function main() {
             },
             {
               name: "Stop background model server",
-              description: "reclaim RAM — stops llamafile + MCP proxy on :8080",
+              description: `reclaim RAM — stops llamafile + MCP proxy on :${MODEL_SERVER_PORT}`,
               onSelect: () => {
                 const stopped = stopModelServer();
                 flash(stopped ? "✓  Model server stopped" : "⚠  Nothing was running", stopped ? GREEN : YELLOW);

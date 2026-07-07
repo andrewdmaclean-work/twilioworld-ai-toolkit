@@ -15,9 +15,20 @@ import {
 } from "@opentui/core";
 import { THEME } from "../theme.ts";
 import { buildEmbeddedRouteChrome } from "./chrome.ts";
+import { createInputGuard } from "./input-guard.ts";
 
 const ERR_COLOR = "#EF4444";
 const START_DELAY_MS = 75;
+
+function isDismissKey(args: unknown[]): boolean {
+  for (const arg of args) {
+    if (typeof arg === "string" && ["\r", "\n", " ", "q"].includes(arg)) return true;
+    if (!arg || typeof arg !== "object") continue;
+    const name = (arg as { name?: unknown }).name;
+    if (typeof name === "string" && ["enter", "return", "space", "escape", "q"].includes(name)) return true;
+  }
+  return false;
+}
 
 function colorFor(line: string, stream: "stdout" | "stderr"): string {
   if (line.startsWith("✓")) return THEME.green;
@@ -75,6 +86,7 @@ export function buildLogScreen(
   body.add(scroll);
 
   let lineCount = 0;
+  const dismissGuard = createInputGuard();
 
   function onLog(line: string, stream: "stdout" | "stderr") {
     if (!line.trim()) return; // skip blank lines
@@ -90,15 +102,18 @@ export function buildLogScreen(
 
   function onDone(ok: boolean) {
     footer.content = ok
-      ? "  ✓  Done — press any key to return to dashboard"
-      : "  ✗  Finished with errors — press any key to return to dashboard";
+      ? "  ✓  Done — press Enter, Escape, Space, or q to return"
+      : "  ✗  Finished with errors — press Enter, Escape, Space, or q to return";
     footer.fg = ok ? THEME.green : ERR_COLOR;
 
-    // Wait for a keypress before handing back to the dashboard.
-    const handler = (key: unknown) => {
+    // Wait for an explicit dismiss key before handing back to the dashboard.
+    const handler = (...args: unknown[]) => {
+      if (!dismissGuard.ready()) return;
+      if (!isDismissKey(args)) return;
       renderer.keyInput.removeListener("keypress", handler);
       onFinished(ok);
     };
+    dismissGuard.arm();
     renderer.keyInput.on("keypress", handler);
   }
 

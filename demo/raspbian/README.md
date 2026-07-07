@@ -30,7 +30,7 @@ Debian ships Node 18 and the toolkit needs >=22.)
 
     docker run -d --name toolkit-raspbian \
       --memory=4g --memory-swap=4g --cpus=4.0 --shm-size=256m \
-      -p 8081:8080 toolkit-raspbian
+      -p 127.0.0.1:8081:8080 toolkit-raspbian
 
 Then open in your Mac's browser:
 
@@ -38,6 +38,11 @@ Then open in your Mac's browser:
 
 Click **Connect** (no password). You land on the PIXEL desktop. Open a
 terminal (menu -> Accessories -> Terminal, or LXTerminal).
+
+On a remote VM, keep noVNC bound to `127.0.0.1` and tunnel it instead of
+exposing a passwordless desktop to the internet:
+
+    ssh -L 8081:127.0.0.1:8081 user@remote-vm
 
 Other Pi specs — just change the caps:
 - Pi 3 / Zero 2:  `--memory=1g --memory-swap=1g --cpus=1.0`
@@ -47,11 +52,15 @@ Other Pi specs — just change the caps:
 `--memory-swap` = `--memory` means no swap beyond RAM, so the container feels
 the RAM ceiling exactly like real hardware (no host swap masking it).
 
+Inside this container, noVNC owns port 8080. The toolkit image sets the local
+model server to `127.0.0.1:8082` and a smaller context window by default so
+llamafile does not collide with noVNC or immediately exhaust a 4GB cap.
+
 ## Share a host folder in (optional, read-only)
 
     docker run -d --name toolkit-raspbian \
       --memory=4g --memory-swap=4g --cpus=4.0 --shm-size=256m \
-      -p 8081:8080 -v "$HOME/Desktop/demo-folder:/demo_files:ro" \
+      -p 127.0.0.1:8081:8080 -v "$HOME/Desktop/demo-folder:/demo_files:ro" \
       toolkit-raspbian
 
 ## Confirmed working
