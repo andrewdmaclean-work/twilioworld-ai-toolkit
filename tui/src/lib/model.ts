@@ -58,7 +58,7 @@ function baseModelArgs(): string[] {
     "-m", GGUF_DEST,
     "--ctx-size", CTX_SIZE,
     "--parallel", "1",
-    "--flash-attn",
+    "--flash-attn", "on",
     "--cache-type-k", "q4_0",
     "--cache-type-v", "q4_0",
     // Reasoning enabled: Pi (and the in-TUI chat) can think before answering.

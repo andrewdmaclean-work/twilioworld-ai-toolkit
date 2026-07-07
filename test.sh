@@ -119,7 +119,7 @@ check "model readiness waits for slow startup" bash -c '
 check "model starts with reasoning enabled" bash -c 'grep -q "\"--reasoning\", \"auto\"" tui/src/lib/model.ts && grep -q "\"--reasoning-budget\", \"-1\"" tui/src/lib/model.ts'
 check "model cache args are compatible" bash -c '
   grep -q "\"--cache-type-v\", \"q4_0\"" tui/src/lib/model.ts &&
-  grep -q "\"--flash-attn\"" tui/src/lib/model.ts &&
+  grep -q "\"--flash-attn\", \"on\"" tui/src/lib/model.ts &&
   grep -q "\"--parallel\", \"1\"" tui/src/lib/model.ts
 '
 check "model port is configurable end-to-end" bash -c '
