@@ -26,6 +26,11 @@ echo "── Entry point ──"
 check "toolkit entry exists"          test -f toolkit
 check "toolkit is executable"         test -x toolkit
 check "toolkit invokes OpenTUI"       grep -q 'bun run src/index.ts' toolkit
+check "toolkit has doctor command"    bash -c '
+  grep -q "run_doctor" toolkit &&
+  grep -q "TwilioWorld Toolkit Doctor" toolkit &&
+  grep -q "git submodule update --init --recursive" toolkit
+'
 
 echo "── TypeScript project ──"
 if command -v bun >/dev/null 2>&1; then
@@ -69,6 +74,19 @@ check "constants has whisperfile URL" grep -q 'WHISPERFILE_URL' tui/src/lib/cons
 check "constants has GGUF URL"        grep -q 'kaggle' tui/src/lib/constants.ts
 check "setup checks prerequisites"   grep -q 'node.*git.*curl' tui/src/lib/setup.ts
 check "setup handles model download"  grep -q 'GGUF_STAGING' tui/src/lib/setup.ts
+check "model extraction has heartbeat" bash -c '
+  grep -q "startExtractionLogger" tui/src/lib/actions.ts &&
+  grep -q "startExtractionLogger" tui/src/lib/setup.ts &&
+  grep -q "still working" tui/src/lib/actions.ts &&
+  grep -q "still working" tui/src/lib/setup.ts
+'
+check "model wait shows Twilio AI tips" bash -c '
+  grep -q "TWILIO_AI_FACTS" tui/src/lib/twilio-facts.ts &&
+  grep -q "Twilio AI tip" tui/src/lib/actions.ts &&
+  grep -q "Twilio AI tip" tui/src/lib/setup.ts &&
+  grep -q "facts: true" tui/src/lib/actions.ts &&
+  grep -q "facts: true" tui/src/lib/setup.ts
+'
 check "setup has blast-radius warning" grep -q 'spend limit' tui/src/lib/setup.ts
 check "setup never prints secret to log" bash -c '! grep -q "SHOWN ONCE" tui/src/lib/setup.ts'
 check "setup has GGUF size check"     grep -q 'GGUF_MIN_BYTES' tui/src/lib/setup.ts
@@ -85,6 +103,19 @@ check "pi-mcp has directTools"        grep -q 'directTools' tui/src/lib/pi-mcp.t
 check "pi-mcp has eager lifecycle"    grep -q 'eager' tui/src/lib/pi-mcp.ts
 check "pi-mcp has execute mcp guard"  grep -q 'TWILIO_MCP_CREDS' tui/src/lib/pi-mcp.ts
 check "model.ts has server args"      grep -q 'serverArgs\|--server' tui/src/lib/model.ts
+check "model startup is observable" bash -c '
+  grep -q "MODEL_SERVER_LOG" tui/src/lib/model.ts &&
+  grep -q "logFile" tui/src/lib/exec.ts &&
+  grep -q "logFile: MODEL_SERVER_LOG" tui/src/screens/chat.ts &&
+  grep -q "logFile: MODEL_SERVER_LOG" tui/src/index.ts &&
+  grep -q "logFile: MODEL_SERVER_LOG" tui/src/lib/pi.ts
+'
+check "model readiness waits for slow startup" bash -c '
+  grep -q "i < 90" tui/src/screens/chat.ts &&
+  grep -q "90s" tui/src/screens/chat.ts &&
+  grep -q "elapsed" tui/src/screens/chat.ts &&
+  grep -q "\-\-max-time" tui/src/lib/model.ts
+'
 check "model starts with reasoning enabled" bash -c 'grep -q "\"--reasoning\", \"auto\"" tui/src/lib/model.ts && grep -q "\"--reasoning-budget\", \"-1\"" tui/src/lib/model.ts'
 check "model port is configurable end-to-end" bash -c '
   grep -q "MODEL_SERVER_PORT" tui/src/lib/constants.ts &&
@@ -93,10 +124,27 @@ check "model port is configurable end-to-end" bash -c '
   grep -q "MODEL_SERVER_PORT" tui/src/lib/exec.ts &&
   grep -q "MODEL_SERVER_PORT" tui/src/screens/chat.ts
 '
+check "local model size copy is current" bash -c '
+  grep -q "LOCAL_MODEL_SIZE_LABEL = \"3.3GB\"" tui/src/lib/constants.ts &&
+  grep -q "LOCAL_MODEL_SIZE_BYTES" tui/src/lib/actions.ts &&
+  ! grep -RIn "2\\.5GB\\|2\\.5 GB\\|~2\\.5" README.md tui/src demo 2>/dev/null
+'
+check "llamafile runtime size copy is current" bash -c '
+  grep -q "LLAMAFILE_SIZE_LABEL = \"302MB\"" tui/src/lib/constants.ts &&
+  grep -q "LLAMAFILE_SIZE_BYTES" tui/src/lib/actions.ts &&
+  grep -q "LLAMAFILE_SIZE_BYTES" tui/src/lib/setup.ts &&
+  ! grep -RIn "100MB\\|100_000_000" README.md tui/src demo 2>/dev/null
+'
 check "voice module uses whisperfile" bash -c 'grep -q "transcribeVoiceFile" tui/src/lib/voice.ts && grep -q "WHISPERFILE_DEST" tui/src/lib/voice.ts'
 check "voice uses documented whisper args" bash -c 'grep -q "\"-m\", q(WHISPER_MODEL_DEST)" tui/src/lib/voice.ts && grep -q "\"--no-prints\"" tui/src/lib/voice.ts'
 check "voice input is gated coming soon" bash -c 'grep -q "VOICE_COMING_SOON" tui/src/lib/voice.ts && grep -q "Whisper model is not bundled yet" tui/src/lib/voice.ts'
 check "setup hides unfinished voice input" bash -c '! grep -q "Voice input — coming soon" tui/src/lib/setup.ts && ! grep -q "Planned command" tui/src/lib/setup.ts'
+check "setup menu reflects completed installs" bash -c '
+  grep -q "buildAddonItems" tui/src/screens/setup.ts &&
+  grep -q "modelReady" tui/src/screens/setup.ts &&
+  grep -q "devPhoneInstalled" tui/src/screens/setup.ts &&
+  grep -q "item.done" tui/src/screens/setup.ts
+'
 check "chat stays inside OpenTUI"     bash -c 'grep -q "buildChatScreen" tui/src/index.ts && ! grep -RIn "combinedArgs\\|chatArgs\\|--chat" tui/src 2>/dev/null'
 check "chat enter sends message"      bash -c 'grep -q "InputRenderableEvents.ENTER" tui/src/screens/chat.ts && ! grep -q "input.onSubmit" tui/src/screens/chat.ts'
 check "chat supports tool calls"      bash -c 'grep -q "CHAT_TOOLS" tui/src/screens/chat.ts && grep -q "tool_choice" tui/src/screens/chat.ts && grep -q "runChatTool" tui/src/screens/chat.ts'
@@ -178,6 +226,14 @@ check "URL opener works in GUI containers" bash -c '
   grep -q "xdg-utils" demo/raspbian/Dockerfile &&
   grep -q "xdg-utils" demo/desktop/Dockerfile
 '
+check "raspbian terminal has UTF-8 fonts" bash -c '
+  grep -q "locale-gen" demo/raspbian/Dockerfile &&
+  grep -q "en_US.UTF-8" demo/raspbian/Dockerfile &&
+  grep -q "fonts-dejavu" demo/raspbian/Dockerfile &&
+  grep -q "fonts-noto-core" demo/raspbian/Dockerfile &&
+  grep -q "fontname=DejaVu Sans Mono" demo/raspbian/Dockerfile &&
+  grep -q "export LANG=en_US.UTF-8" demo/raspbian/Dockerfile
+'
 check "shell prompts read from terminal" bash -c '
   grep -q "ask_install_node" toolkit &&
   grep -q "/dev/tty" toolkit &&
@@ -187,6 +243,13 @@ check "shell prompts read from terminal" bash -c '
   ! grep -RIn "read -r -p" toolkit uninstall.sh 2>/dev/null
 '
 check "setup subprocesses cannot consume TUI input" grep -q 'stdio: \["ignore", "pipe", "pipe"\]' tui/src/lib/exec.ts
+check "streaming logs sanitize terminal progress" bash -c '
+  grep -q "stripTerminalControls" tui/src/lib/exec.ts &&
+  grep -q "latestCarriageReturnFrame" tui/src/lib/exec.ts &&
+  grep -q "streamChunk" tui/src/lib/exec.ts &&
+  grep -q "\\\\r" tui/src/lib/exec.ts &&
+  grep -q "lastLogKey" tui/src/screens/log.ts
+'
 check "confirm screens ignore carried enter" bash -c '
   grep -q "createInputGuard" tui/src/screens/input-guard.ts &&
   grep -q "confirmGuard.ready()" tui/src/screens/setup.ts &&
@@ -201,7 +264,8 @@ check "route transitions ignore carried enter" bash -c '
 check "log dismissal uses explicit keys" bash -c '
   grep -q "isDismissKey" tui/src/screens/log.ts &&
   grep -q "Enter, Escape, Space, or q" tui/src/screens/log.ts &&
-  ! grep -q "press any key" tui/src/screens/log.ts
+  ! grep -q "press any key" tui/src/screens/log.ts &&
+  ! grep -q "onLog(\"Starting task" tui/src/screens/log.ts
 '
 check "no gum references remain"      bash -c '! grep -RIn "\bgum\b" README.md uninstall.sh tui/src tui/package.json 2>/dev/null'
 check "no plain UI fallback remains"  bash -c '! grep -RIn "src/plain\|TOOLKIT_PLAIN\|--plain" toolkit tui/src tui/package.json 2>/dev/null'
@@ -213,6 +277,10 @@ check "E-11 context window raised (model.ts)"      grep -q '"32768"' tui/src/lib
 check "E-11 context window raised (pi models.json)" bash -c 'command -v jq && jq -e ".providers.llamafile.models[0].contextWindow == 32768" .pi/models.json || python3 -c "import json; d=json.load(open(\".pi/models.json\")); assert d[\"providers\"][\"llamafile\"][\"models\"][0][\"contextWindow\"] == 32768"'
 check "E-11 context window raised (opencode.json)"  bash -c 'command -v jq && jq -e ".provider.llamafile.models[\"gemma4-e2b\"].limit.context == 32768" opencode.json || python3 -c "import json; d=json.load(open(\"opencode.json\")); assert d[\"provider\"][\"llamafile\"][\"models\"][\"gemma4-e2b\"][\"limit\"][\"context\"] == 32768"'
 check "E-2/M-3 curl downloads resume + bound redirects" bash -c 'grep -q "curlDownloadArgs" tui/src/lib/setup.ts && grep -q "\-\-max-redirs" tui/src/lib/setup.ts && grep -q "\"-C\", \"-\"" tui/src/lib/setup.ts'
+check "curl progress is rendered by toolkit" bash -c '
+  grep -q "\-\-no-progress-meter" tui/src/lib/actions.ts &&
+  grep -q "\-\-no-progress-meter" tui/src/lib/setup.ts
+'
 check "E-8/H-4 root guard in index.ts" grep -q 'assertNotRoot' tui/src/index.ts
 check "E-8/H-4 root guard in toolkit entry" bash -c 'grep -q "EUID" toolkit && grep -q "should not be run as root" toolkit'
 check "C-1/H-3 magic-byte check before chmod +x" grep -q 'looksLikeExecutable' tui/src/lib/setup.ts

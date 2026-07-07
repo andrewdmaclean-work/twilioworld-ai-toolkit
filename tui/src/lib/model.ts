@@ -10,6 +10,7 @@ import {
   GGUF_MIN_BYTES,
   GGUF_MMPROJ,
   LLAMAFILE_DEST,
+  MODEL_SERVER_LOG,
   MODEL_SERVER_PORT,
   MODEL_SERVER_URL,
   WEBUI_CONFIG_FILE,
@@ -45,10 +46,12 @@ export function modelReady(): { runtime: boolean; weights: boolean } {
 export function modelRunning(): boolean {
   try {
     // Quick sync check against the API endpoint
-    const res = capture("curl", ["-fsS", MODEL_SERVER_URL]);
+    const res = capture("curl", ["-fsS", "--max-time", "1", MODEL_SERVER_URL]);
     return Boolean(res);
   } catch { return false; }
 }
+
+export { MODEL_SERVER_LOG };
 
 function baseModelArgs(): string[] {
   const args = [

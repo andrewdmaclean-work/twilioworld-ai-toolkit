@@ -3,7 +3,7 @@
 // Shown once, when no .toolkit/config.json exists. Presents the opinionated
 // happy path as a checklist of steps the user can run or skip:
 //   1. Twilio CLI + Dev Phone
-//   2. Local AI chat (Gemma, ~2.5GB)
+//   2. Local AI chat (Gemma)
 //   3. Configure a coding agent
 //
 // Each step runs in a log screen and returns here. "Go to dashboard"
@@ -16,6 +16,7 @@ import { buildLogScreen } from "./log.ts";
 import { buildAgentScreen } from "./agent.ts";
 import { downloadLocalModel, installDevPhone } from "../lib/actions.ts";
 import { writeConfig, readConfig } from "../lib/config.ts";
+import { LOCAL_MODEL_SIZE_LABEL } from "../lib/constants.ts";
 
 /** Persist config so onboarding is considered "done" and never auto-runs. */
 function markOnboarded(): void {
@@ -51,7 +52,7 @@ export function buildOnboardingScreen(
           onSelect: () => { runStep("Twilio CLI + Dev Phone", (l, d) => installDevPhone({ onLog: l, onDone: d })); return false; },
         },
         {
-          name: "2 · Local AI chat (Gemma, ~2.5GB)",
+          name: `2 · Local AI chat (Gemma, ~${LOCAL_MODEL_SIZE_LABEL})`,
           description: "download the offline model so Chat with Twilio Docs works",
           onSelect: () => { runStep("Local AI chat (Gemma)", (l, d) => downloadLocalModel({ onLog: l, onDone: d })); return false; },
         },

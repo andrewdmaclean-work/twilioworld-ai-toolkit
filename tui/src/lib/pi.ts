@@ -11,6 +11,7 @@ import {
   GGUF_DEST,
     GGUF_MIN_BYTES,
     LLAMAFILE_DEST,
+    MODEL_SERVER_LOG,
     MODEL_SERVER_PORT,
     MODEL_SERVER_URL,
   PI_AGENT_DIR,
@@ -92,11 +93,11 @@ export async function launchPi(opts: { onLog: LogFn }): Promise<NewWindowResult>
   // Ensure model server is running
   if (!isModelServerRunning()) {
     onLog("▶ Starting local Gemma service…", "stdout");
-    startDaemon(LLAMAFILE_DEST, serverArgs(), { cwd: ROOT });
+    startDaemon(LLAMAFILE_DEST, serverArgs(), { cwd: ROOT, logFile: MODEL_SERVER_LOG });
     // Give it a few seconds to start
     await new Promise<void>((resolve) => setTimeout(resolve, 3000));
     if (!isModelServerRunning()) {
-      onLog("⚠  Gemma service did not respond yet — Pi may be slow to start.", "stderr");
+      onLog(`⚠  Gemma service did not respond yet — Pi may be slow to start. Logs: ${MODEL_SERVER_LOG}`, "stderr");
     } else {
       onLog(`✓ Gemma service ready on :${MODEL_SERVER_PORT}`, "stdout");
     }

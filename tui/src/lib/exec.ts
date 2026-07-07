@@ -21,10 +21,10 @@
 //   startDaemon()      — long-running background process, own process group.
 
 import { spawn, spawnSync, type ChildProcess } from "child_process";
-import { existsSync, writeFileSync } from "fs";
+import { closeSync, existsSync, mkdirSync, openSync, writeFileSync } from "fs";
 import { execSync } from "child_process";
 import { tmpdir } from "os";
-import { join } from "path";
+import { dirname, join } from "path";
 import { MCP_PROXY_PORT, MCP_PROXY_SCRIPT, MODEL_SERVER_PORT } from "./constants.ts";
 
 export type LogFn = (line: string, stream: "stdout" | "stderr") => void;
@@ -44,6 +44,42 @@ function shCmd(command: string, args: string[]): string {
   return [command, ...args].map(q).join(" ");
 }
 
+function stripTerminalControls(text: string): string {
+  let clean = text
+    // OSC/title sequences.
+    .replace(/\x1B\][^\x07]*(?:\x07|\x1B\\)/g, "")
+    // CSI and common ANSI escape sequences.
+    .replace(/[\x1B\x9B][[\]()#;?]*(?:(?:[0-9A-Za-z]*(?:;[0-9A-Za-z]*)*)?\x07|(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-PR-TZcf-nq-uy=><~])/g, "")
+    // Other C0 controls except backspace, newline, carriage return, and tab.
+    .replace(/[\x00-\x07\x0B\x0C\x0E-\x1F\x7F]/g, "");
+
+  // Some package-manager progress renderers use backspace to redraw a line.
+  // Collapse "x\b" pairs before the append-only log sees them.
+  while (/[^\n\r]\x08/.test(clean)) clean = clean.replace(/[^\n\r]\x08/g, "");
+  return clean;
+}
+
+function latestCarriageReturnFrame(line: string): string {
+  const parts = line.split("\r");
+  return parts[parts.length - 1] ?? "";
+}
+
+function streamChunk(
+  rest: string,
+  data: Buffer,
+  stream: "stdout" | "stderr",
+  onLog: LogFn,
+): string {
+  const text = stripTerminalControls(rest + data.toString());
+  const parts = text.split("\n");
+  const nextRest = latestCarriageReturnFrame(parts.pop() ?? "");
+  for (const raw of parts) {
+    const line = latestCarriageReturnFrame(raw).trimEnd();
+    if (line) onLog(line, stream);
+  }
+  return nextRest;
+}
+
 /** Non-interactive command; stdout/stderr streamed line-by-line to onLog. */
 export function runStreaming(
   command: string,
@@ -60,21 +96,15 @@ export function runStreaming(
     let outRest = "";
     let errRest = "";
     child.stdout.on("data", (d: Buffer) => {
-      const s = outRest + d.toString();
-      const parts = s.split(/\r?\n/);
-      outRest = parts.pop() ?? "";
-      parts.forEach((l) => { if (l) opts.onLog(l, "stdout"); });
+      outRest = streamChunk(outRest, d, "stdout", opts.onLog);
     });
     child.stderr.on("data", (d: Buffer) => {
-      const s = errRest + d.toString();
-      const parts = s.split(/\r?\n/);
-      errRest = parts.pop() ?? "";
-      parts.forEach((l) => { if (l) opts.onLog(l, "stderr"); });
+      errRest = streamChunk(errRest, d, "stderr", opts.onLog);
     });
     child.on("error", (e: Error) => { opts.onLog(`error: ${e.message}`, "stderr"); });
     child.on("close", (code: number | null) => {
-      if (outRest) opts.onLog(outRest, "stdout");
-      if (errRest) opts.onLog(errRest, "stderr");
+      if (outRest.trim()) opts.onLog(latestCarriageReturnFrame(outRest).trimEnd(), "stdout");
+      if (errRest.trim()) opts.onLog(latestCarriageReturnFrame(errRest).trimEnd(), "stderr");
       resolve({ code: code ?? 1, ok: code === 0 });
     });
   });
@@ -232,14 +262,20 @@ export function openInNewWindow(
 export function startDaemon(
   command: string,
   args: string[],
-  opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
+  opts: { cwd?: string; env?: NodeJS.ProcessEnv; logFile?: string } = {},
 ): ChildProcess {
+  let logFd: number | undefined;
+  if (opts.logFile) {
+    mkdirSync(dirname(opts.logFile), { recursive: true });
+    logFd = openSync(opts.logFile, "a");
+  }
   const child = spawn("/bin/sh", ["-c", shCmd(command, args)], {
     cwd: opts.cwd,
     env: opts.env ?? process.env,
-    stdio: "ignore",
+    stdio: logFd === undefined ? "ignore" : ["ignore", logFd, logFd],
     detached: true,
   });
+  if (logFd !== undefined) closeSync(logFd);
   child.unref();
   return child;
 }

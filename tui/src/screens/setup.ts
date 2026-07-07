@@ -5,26 +5,50 @@
 import { type CliRenderer, BoxRenderable, SelectRenderable, SelectRenderableEvents, TextRenderable } from "@opentui/core";
 import { CheckList, type CheckItem } from "../checklist.ts";
 import { writeConfig, readConfig, type AddonKey } from "../lib/config.ts";
+import { capture, have } from "../lib/exec.ts";
+import { LOCAL_MODEL_SIZE_LABEL } from "../lib/constants.ts";
+import { modelReady } from "../lib/model.ts";
 import { runSetup } from "../lib/setup.ts";
 import { THEME } from "../theme.ts";
 import { buildEmbeddedRouteChrome, removeAllChildren } from "./chrome.ts";
 import { createInputGuard } from "./input-guard.ts";
 import { buildLogScreen } from "./log.ts";
 
-type SetupItem = CheckItem & { key: AddonKey | `__${string}` };
-
-const ADDON_ITEMS: SetupItem[] = [
-  { key: "__local", label: "Local chat", description: "Installs the model used by Chat with Twilio.", heading: true },
-  { key: "localGemma"   as AddonKey, label: "Local model for Chat with Twilio",  description: "Required for in-app local chat and Pi (~2.5 GB)" },
-  { key: "__tools", label: "Twilio tools", description: "Optional local tools.", heading: true },
-  { key: "devPhone"     as AddonKey, label: "Install Dev Phone",          description: "Browser soft phone for SMS + voice" },
-];
+type SetupItem = CheckItem & { key: AddonKey | `__${string}`; done?: boolean };
 
 function isConfigItem(item: SetupItem): item is SetupItem & { key: AddonKey } {
   return !item.heading;
 }
 
-const CONFIG_ITEMS = ADDON_ITEMS.filter(isConfigItem);
+function doneLabel(done: boolean, label: string): string {
+  return done ? `✓ ${label}` : label;
+}
+
+function devPhoneInstalled(): boolean {
+  return have("twilio") && capture("twilio", ["plugins"]).includes("plugin-dev-phone");
+}
+
+function buildAddonItems(): SetupItem[] {
+  const model = modelReady();
+  const localDone = model.runtime && model.weights;
+  const devDone = devPhoneInstalled();
+  return [
+    { key: "__local", label: "Local chat", description: localDone ? "Done." : "Installs the model used by Chat with Twilio.", heading: true },
+    {
+      key: "localGemma" as AddonKey,
+      label: doneLabel(localDone, "Local model for Chat with Twilio"),
+      description: localDone ? "Downloaded and ready." : `Required for in-app local chat and Pi (~${LOCAL_MODEL_SIZE_LABEL})`,
+      done: localDone,
+    },
+    { key: "__tools", label: "Twilio tools", description: devDone ? "Done." : "Optional local tools.", heading: true },
+    {
+      key: "devPhone" as AddonKey,
+      label: doneLabel(devDone, "Install Dev Phone"),
+      description: devDone ? "Dev Phone plugin installed." : "Browser soft phone for SMS + voice",
+      done: devDone,
+    },
+  ];
+}
 
 export function buildSetupScreen(
   renderer: CliRenderer,
@@ -32,8 +56,10 @@ export function buildSetupScreen(
   onCancel: () => void,
 ): BoxRenderable {
   const current = readConfig();
+  const addonItems = buildAddonItems();
+  const configItems = addonItems.filter(isConfigItem);
   const initialChecked = new Set<number>(
-    ADDON_ITEMS.map((item, i) => (isConfigItem(item) && current.addons[item.key] ? i : -1)).filter((i) => i >= 0),
+    addonItems.map((item, i) => (isConfigItem(item) && (current.addons[item.key] || item.done) ? i : -1)).filter((i) => i >= 0),
   );
 
   const { screen, body } = buildEmbeddedRouteChrome(renderer, {
@@ -45,7 +71,7 @@ export function buildSetupScreen(
     footer: "  Escape dashboard    Space toggle choice    Enter save",
   });
 
-  const checklist = new CheckList(renderer, "addon-pick", ADDON_ITEMS, initialChecked);
+  const checklist = new CheckList(renderer, "addon-pick", addonItems, initialChecked);
   body.add(checklist.container);
 
   // Confirm panel (shown after checklist confirm)
@@ -106,7 +132,7 @@ export function buildSetupScreen(
       executeMcp: false,
       voiceInput: false,
     };
-    for (const item of CONFIG_ITEMS) addons[item.key] = checkedKeys.includes(item.key);
+    for (const item of configItems) addons[item.key] = checkedKeys.includes(item.key) || Boolean(item.done);
     writeConfig(addons);
     checklist.container.visible = false;
     confirmLabel.visible = true;

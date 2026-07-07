@@ -53,6 +53,10 @@ export const GGUF_MMPROJ = join(MODELS_DIR, "gemma4-e2b-mmproj.gguf");
 export const GGUF_STAGING = join(MODELS_DIR, "gemma4-e2b.download");
 export const SYSTEM_PROMPT = join(MODELS_DIR, "system-prompt.txt");
 export const GGUF_MIN_BYTES = 1_500_000_000; // 1.5 GB floor for the main model
+export const LOCAL_MODEL_SIZE_LABEL = "3.3GB";
+export const LOCAL_MODEL_SIZE_BYTES = 3_543_348_429;
+export const LLAMAFILE_SIZE_LABEL = "302MB";
+export const LLAMAFILE_SIZE_BYTES = 302_000_000;
 
 export const SKILLS_DIR = join(ROOT, "vendor", "twilio-ai", "skills");
 

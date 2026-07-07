@@ -28,9 +28,9 @@ import { loadToolkitEnv } from "./lib/env.ts";
 import { runUninstall, type UninstallKey } from "./lib/uninstall.ts";
 import { buildInvadersScreen } from "./screens/invaders.ts";
 import {
-  LLAMAFILE_DEST, ROOT, MODEL_SERVER_PORT, MODEL_SERVER_URL, CONFIG_FILE,
+  LLAMAFILE_DEST, LOCAL_MODEL_SIZE_LABEL, ROOT, MODEL_SERVER_PORT, MODEL_SERVER_URL, CONFIG_FILE,
 } from "./lib/constants.ts";
-import { serverArgs, modelReady } from "./lib/model.ts";
+import { MODEL_SERVER_LOG, serverArgs, modelReady } from "./lib/model.ts";
 import { openUrl, openLlamaWebUi, startMcpProxy, capture, have, startDaemon } from "./lib/exec.ts";
 import { pathNodeVersion, supportsPiNode } from "./lib/node-version.ts";
 
@@ -139,7 +139,7 @@ function wrapText(text: string, width: number): string {
 
 function nextMove(s: ToolkitStatus | null): string {
   if (!s) return "Loading local status.";
-  if (!s.model.ready) return "Chat with Twilio Docs will download the local model (~2.5GB) on first use.";
+  if (!s.model.ready) return `Chat with Twilio Docs will download the local model (~${LOCAL_MODEL_SIZE_LABEL}) on first use.`;
   if (!s.twilio.installed) return "Twilio CLI opens/installs from the Twilio CLI menu when you need it.";
   return "Chat with Twilio Docs, Configure an agent, or open Dev Phone.";
 }
@@ -182,10 +182,14 @@ interface MenuItem {
   visible: (s: ToolkitStatus) => boolean;
 }
 
+function doneLabel(done: boolean, label: string): string {
+  return done ? `✓ ${label}` : label;
+}
+
 const ALL_ITEMS: MenuItem[] = [
   { id: "chat",
-    label: () => "Chat with Twilio Docs",
-    detail: () => "local AI chat — in the TUI or the browser web UI",
+    label: (s) => doneLabel(Boolean(s?.model.ready), "Chat with Twilio Docs"),
+    detail: (s) => s?.model.ready ? "local AI chat — model downloaded" : "local AI chat — downloads model on first use",
     visible: () => true },
 
   { id: "agent",
@@ -194,13 +198,13 @@ const ALL_ITEMS: MenuItem[] = [
     visible: () => true },
 
   { id: "devphone",
-    label: () => "Dev Phone",
-    detail: () => "browser soft phone — real SMS + voice",
+    label: (s) => doneLabel(Boolean(s?.devPhone.installed), "Dev Phone"),
+    detail: (s) => s?.devPhone.installed ? "browser soft phone — installed" : "browser soft phone — real SMS + voice",
     visible: () => true },
 
   { id: "cli",
-    label: () => "Twilio CLI",
-    detail: () => "open a terminal, log in, check account, or uninstall",
+    label: (s) => doneLabel(Boolean(s?.twilio.installed), "Twilio CLI"),
+    detail: (s) => s?.twilio.sid ? `logged in as ${s.twilio.profile}` : s?.twilio.installed ? "installed, not logged in" : "open a terminal, log in, check account, or uninstall",
     visible: () => true },
 
   { id: "resources",
@@ -238,7 +242,7 @@ function detailFor(item: MenuItem | undefined, s: ToolkitStatus | null): string 
         "",
         s?.model.ready
           ? "Ready. Enter to choose TUI or browser."
-          : "Not downloaded yet — Enter offers to download it (~2.5GB).",
+          : `Not downloaded yet — Enter offers to download it (~${LOCAL_MODEL_SIZE_LABEL}).`,
       ].join("\n");
     case "agent":
       return [
@@ -709,7 +713,7 @@ async function main() {
         const startBrowser = () => {
           startMcpProxy();
           if (!Boolean(capture("curl", ["-fsS", MODEL_SERVER_URL]))) {
-            startDaemon(LLAMAFILE_DEST, serverArgs(), { cwd: ROOT });
+            startDaemon(LLAMAFILE_DEST, serverArgs(), { cwd: ROOT, logFile: MODEL_SERVER_LOG });
             flash(`Starting model server on :${MODEL_SERVER_PORT}…`, GREEN);
             setTimeout(() => { poll(); openLlamaWebUi(); }, 3000);
           } else {
@@ -718,51 +722,59 @@ async function main() {
           }
         };
 
-        showRoute(buildSubmenuScreen(renderer, {
-          id: "chat-screen",
-          route: "Dashboard / Chat with Twilio Docs",
-          title: "Chat with Twilio Docs",
-          subtitle: "Local AI chat. Escape returns to dashboard.",
-          bodyTitle: "Chat",
-          options: [
-            {
-              name: "In the TUI",
-              description: "chat inside this terminal (Twilio Skills + Docs MCP)",
-              onSelect: () => {
-                if (!ready()) {
-                  runAction("Download local model", (onLog, onDone) => downloadLocalModel({ onLog, onDone }));
+	        showRoute(buildSubmenuScreen(renderer, {
+	          id: "chat-screen",
+	          route: "Dashboard / Chat with Twilio Docs",
+	          title: "Chat with Twilio Docs",
+	          subtitle: "Local AI chat. Escape returns to dashboard.",
+	          bodyTitle: "Chat",
+	          options: [
+	            {
+	              name: doneLabel(Boolean(latestStatus?.model.ready), "In the TUI"),
+	              description: latestStatus?.model.ready
+	                ? "model downloaded — chat inside this terminal"
+	                : "downloads the local model, then chats inside this terminal",
+	              onSelect: () => {
+	                if (!ready()) {
+	                  runAction("Download local model", (onLog, onDone) => downloadLocalModel({ onLog, onDone }));
                   return false;
                 }
                 showRoute(buildChatScreen(renderer, back), "Chat");
                 return false;
               },
-            },
-            {
-              name: "In the browser (web UI)",
-              description: "open the llama.cpp web UI, pre-wired to Twilio Docs MCP",
-              onSelect: () => {
-                if (!ready()) {
-                  runAction("Download local model", (onLog, onDone) => downloadLocalModel({ onLog, onDone }));
+	            },
+	            {
+	              name: doneLabel(Boolean(latestStatus?.model.running), "In the browser (web UI)"),
+	              description: latestStatus?.model.running
+	                ? `model server running on :${MODEL_SERVER_PORT} — open web UI`
+	                : "start the model server and open the llama.cpp web UI",
+	              onSelect: () => {
+	                if (!ready()) {
+	                  runAction("Download local model", (onLog, onDone) => downloadLocalModel({ onLog, onDone }));
                   return false;
                 }
                 startBrowser();
                 return true;
               },
-            },
-            {
-              name: "Stop background model server",
-              description: `reclaim RAM — stops llamafile + MCP proxy on :${MODEL_SERVER_PORT}`,
-              onSelect: () => {
-                const stopped = stopModelServer();
+	            },
+	            {
+	              name: "Stop background model server",
+	              description: latestStatus?.model.running
+	                ? `running on :${MODEL_SERVER_PORT} — stop it to reclaim RAM`
+	                : "not running",
+	              onSelect: () => {
+	                const stopped = stopModelServer();
                 flash(stopped ? "✓  Model server stopped" : "⚠  Nothing was running", stopped ? GREEN : YELLOW);
                 setTimeout(() => poll(), 500);
                 return true;
               },
-            },
-            {
-              name: "Remove local model",
-              description: "delete downloaded Gemma + llamafile (~2.5GB)",
-              onSelect: () => {
+	            },
+	            {
+	              name: "Remove local model",
+	              description: latestStatus?.model.ready
+	                ? `delete downloaded Gemma + llamafile (~${LOCAL_MODEL_SIZE_LABEL})`
+	                : "nothing downloaded yet",
+	              onSelect: () => {
                 runAction("Remove local model", (onLog, onDone) => runUninstall({ keys: ["modelRuntime"] as UninstallKey[], onLog, onDone }));
                 return false;
               },
@@ -779,12 +791,16 @@ async function main() {
           route: "Dashboard / Dev Phone",
           title: "Dev Phone",
           subtitle: "Browser soft phone. Escape returns to dashboard.",
-          bodyTitle: "Dev Phone",
-          options: [
-            {
-              name: "Open Dev Phone",
-              description: "installs it first if needed, then opens in a new window",
-              onSelect: () => {
+	          bodyTitle: "Dev Phone",
+	          options: [
+	            {
+	              name: doneLabel(Boolean(latestStatus?.devPhone.installed), "Open Dev Phone"),
+	              description: latestStatus?.devPhone.installed
+	                ? "installed — opens in a new window"
+	                : latestStatus?.twilio.installed
+	                  ? "Dev Phone not installed — install then open"
+	                  : "Twilio CLI and Dev Phone not installed — install then open",
+	              onSelect: () => {
                 if (!have("twilio") || !latestStatus?.devPhone.installed) {
                   runAction("Install Dev Phone", async (onLog, onDone) => {
                     await installDevPhone({ onLog, onDone: () => {} });
@@ -799,11 +815,13 @@ async function main() {
                 flash(res.ok ? "✓  Dev Phone opened in a new window" : `⚠  ${res.error}`, res.ok ? GREEN : YELLOW);
                 return true;
               },
-            },
-            {
-              name: "Uninstall Dev Phone",
-              description: "remove the @twilio-labs/plugin-dev-phone plugin",
-              onSelect: () => {
+	            },
+	            {
+	              name: "Uninstall Dev Phone",
+	              description: latestStatus?.devPhone.installed
+	                ? "remove the @twilio-labs/plugin-dev-phone plugin"
+	                : "not installed",
+	              onSelect: () => {
                 runAction("Uninstall Dev Phone", (onLog, onDone) => runUninstall({ keys: ["devPhone"] as UninstallKey[], onLog, onDone }));
                 return false;
               },
@@ -823,10 +841,12 @@ async function main() {
             subtitle: "Terminal, login, switch account, uninstall. Escape returns to dashboard.",
             bodyTitle: "Twilio CLI",
             options: [
-            {
-              name: "Open a terminal",
-              description: "new window with the Twilio CLI on PATH",
-              onSelect: () => {
+	            {
+	              name: doneLabel(Boolean(latestStatus?.twilio.installed), "Open a terminal"),
+	              description: latestStatus?.twilio.installed
+	                ? "Twilio CLI installed — open a new terminal"
+	                : "Twilio CLI not installed — install then open terminal",
+	              onSelect: () => {
                 if (!have("twilio")) {
                   runAction("Install Twilio CLI", (onLog, onDone) => installTwilioCli({ onLog, onDone }));
                   return false;
@@ -835,10 +855,12 @@ async function main() {
                 flash(res.ok ? "✓  Terminal opened" : `⚠  ${res.error}`, res.ok ? GREEN : YELLOW);
                 return true;
               },
-            },
-            {
-              name: "Log in (add an account)",
-              description: "run twilio login in a new window",
+	            },
+	            {
+	              name: doneLabel(Boolean(latestStatus?.twilio.sid), "Log in (add an account)"),
+	              description: latestStatus?.twilio.sid
+	                ? `logged in as ${latestStatus.twilio.profile}`
+	                : "run twilio login in a new window",
               onSelect: () => {
                 if (!have("twilio")) {
                   runAction("Install Twilio CLI", (onLog, onDone) => installTwilioCli({ onLog, onDone }));
@@ -849,9 +871,11 @@ async function main() {
                 return true;
               },
             },
-            {
-              name: "Switch account",
-              description: "choose among your configured Twilio CLI profiles",
+	            {
+	              name: "Switch account",
+	              description: latestStatus?.twilio.sid
+	                ? `active: ${latestStatus.twilio.profile}`
+	                : "choose among your configured Twilio CLI profiles",
               onSelect: () => {
                 if (!have("twilio")) { flash("⚠  Twilio CLI not installed", YELLOW); return true; }
                 const profiles = listTwilioProfiles();
@@ -879,18 +903,18 @@ async function main() {
                 return false;
               },
             },
-            {
-              name: "Account status",
-              description: latestStatus?.twilio.sid ? `${latestStatus.twilio.profile} (${latestStatus.twilio.sid})` : "not logged in",
+	            {
+	              name: doneLabel(Boolean(latestStatus?.twilio.sid), "Account status"),
+	              description: latestStatus?.twilio.sid ? `${latestStatus.twilio.profile} (${latestStatus.twilio.sid})` : "not logged in",
               onSelect: () => {
                 if (!have("twilio")) { flash("⚠  Twilio CLI not installed", YELLOW); return true; }
                 flash(latestStatus?.twilio.sid ? `✓  ${latestStatus.twilio.profile} — ${latestStatus.twilio.sid}` : "Not logged in — use Login", latestStatus?.twilio.sid ? GREEN : YELLOW);
                 return true;
               },
             },
-            {
-              name: "Enable Execute MCP (read-only)",
-              description: process.env.TWILIO_MCP_CREDS ? "creds already loaded" : "create a read-only API key so agents can inspect your account",
+	            {
+	              name: doneLabel(Boolean(process.env.TWILIO_MCP_CREDS), "Enable Execute MCP (read-only)"),
+	              description: process.env.TWILIO_MCP_CREDS ? "creds already loaded" : "create a read-only API key so agents can inspect your account",
               onSelect: () => {
                 if (!have("twilio")) { flash("⚠  Twilio CLI not installed", YELLOW); return false; }
                 // Restricted-key creation needs the Account SID + Auth Token
@@ -912,9 +936,9 @@ async function main() {
                 return false;
               },
             },
-            {
-              name: "Uninstall Twilio CLI",
-              description: "npm uninstall -g twilio-cli",
+	            {
+	              name: "Uninstall Twilio CLI",
+	              description: latestStatus?.twilio.installed ? "npm uninstall -g twilio-cli" : "not installed",
               onSelect: () => {
                 runAction("Uninstall Twilio CLI", (onLog, onDone) => runUninstall({ keys: ["twilioCli"] as UninstallKey[], onLog, onDone }));
                 return false;

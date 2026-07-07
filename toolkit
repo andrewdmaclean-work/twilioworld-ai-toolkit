@@ -6,6 +6,84 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+node_ok() {
+  command -v node >/dev/null 2>&1 || return 1
+  local v major rest minor
+  v="$(node --version | sed 's/^v//')"
+  major="${v%%.*}"; rest="${v#*.}"; minor="${rest%%.*}"
+  (( major > 22 || (major == 22 && minor >= 19) ))
+}
+
+doctor_check() {
+  local desc="$1"; shift
+  if "$@" >/dev/null 2>&1; then
+    printf 'OK   %s\n' "$desc"
+    return 0
+  fi
+  printf 'MISS %s\n' "$desc"
+  return 1
+}
+
+doctor_info() {
+  local desc="$1"; shift
+  if "$@" >/dev/null 2>&1; then
+    printf 'OK   %s\n' "$desc"
+  else
+    printf 'INFO %s not installed yet\n' "$desc"
+  fi
+}
+
+run_doctor() {
+  local fail=0
+  echo "TwilioWorld Toolkit Doctor"
+  echo "repo: $ROOT"
+  echo
+
+  doctor_check "interactive terminal" test -t 0 || fail=1
+  doctor_check "UTF-8 locale" bash -c 'case "${LC_ALL:-${LANG:-}}" in *UTF-8*|*utf8*|*UTF8*) exit 0 ;; *) exit 1 ;; esac' || fail=1
+  doctor_check "git on PATH" command -v git || fail=1
+  doctor_check "curl on PATH" command -v curl || fail=1
+  doctor_check "bun on PATH" command -v bun || fail=1
+  doctor_check "Node >= 22.19.0" node_ok || fail=1
+  doctor_check "Twilio skills submodule populated" test -f "$ROOT/vendor/twilio-ai/skills/README.md" || fail=1
+  doctor_check "repo writable" test -w "$ROOT" || fail=1
+
+  if command -v df >/dev/null 2>&1; then
+    local available_kb
+    available_kb="$(df -Pk "$ROOT" | awk 'NR==2 {print $4}')"
+    if [[ "${available_kb:-0}" =~ ^[0-9]+$ && "$available_kb" -ge 6291456 ]]; then
+      printf 'OK   disk space for local model (%s GB free)\n' "$((available_kb / 1024 / 1024))"
+    else
+      printf 'MISS disk space for local model (need roughly 6 GB free)\n'
+      fail=1
+    fi
+  fi
+
+  doctor_info "llamafile runtime" test -x "$ROOT/bin/llamafile"
+  doctor_info "local model file" test -f "$ROOT/models/gemma-3-4b-it-QAT-Q4_0.gguf"
+
+  echo
+  if [[ "$fail" -eq 0 ]]; then
+    echo "Doctor passed. Run ./toolkit to open the dashboard."
+  else
+    echo "Doctor found missing prerequisites. Run ./toolkit and Setup can install the supported pieces."
+    echo "If the submodule is missing, run: git submodule update --init --recursive"
+  fi
+  return "$fail"
+}
+
+case "${1:-}" in
+  doctor|--doctor)
+    run_doctor
+    exit $?
+    ;;
+  -h|--help)
+    echo "Usage: ./toolkit [doctor|--doctor]"
+    echo "Run without arguments to launch the TUI dashboard."
+    exit 0
+    ;;
+esac
+
 # Security audit E-8/H-4: refuse root before doing anything — installing
 # bun, running `bun install`, and downloading multi-GB model files as
 # root would leave root-owned files under $ROOT that a normal-user run
@@ -40,14 +118,6 @@ cd "$ROOT/tui"
 # no system-wide change — it lives in ~/.nvm and is the most portable
 # option across macOS/Linux). We prompt first because installing nvm
 # writes to the user's shell rc files.
-node_ok() {
-  command -v node >/dev/null 2>&1 || return 1
-  local v major rest minor
-  v="$(node --version | sed 's/^v//')"
-  major="${v%%.*}"; rest="${v#*.}"; minor="${rest%%.*}"
-  (( major > 22 || (major == 22 && minor >= 19) ))
-}
-
 # Load nvm into THIS shell if it's already installed but not sourced
 # (non-interactive shells don't run the rc lines that define `nvm`).
 load_nvm() {

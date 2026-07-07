@@ -6,7 +6,7 @@ import {
   TextRenderable,
   type CliRenderer,
 } from "@opentui/core";
-import { modelReady, modelRunning, serverArgs } from "../lib/model.ts";
+import { MODEL_SERVER_LOG, modelReady, modelRunning, serverArgs } from "../lib/model.ts";
 import { LLAMAFILE_DEST, MODEL_SERVER_PORT, MODEL_SERVER_URL, ROOT } from "../lib/constants.ts";
 import { startDaemon } from "../lib/exec.ts";
 import { CHAT_TOOLS, runChatTool, type ToolCall } from "../lib/chat-tools.ts";
@@ -79,10 +79,11 @@ async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function waitForServer(): Promise<boolean> {
-  for (let i = 0; i < 20; i++) {
+async function waitForServer(onTick: (elapsedSeconds: number) => void): Promise<boolean> {
+  for (let i = 0; i < 90; i++) {
     if (modelRunning()) return true;
-    await sleep(500);
+    onTick(i + 1);
+    await sleep(1000);
   }
   return false;
 }
@@ -190,6 +191,7 @@ export function buildChatScreen(renderer: CliRenderer, onCancel: () => void): Bo
   let lineId = 0;
   let sending = false;
   let serverReady = false;
+  let serverStarting: Promise<boolean> | null = null;
   let voiceSession: VoiceSession | null = null;
 
   function addLine(label: string, content: string, color: string): TextRenderable {
@@ -213,13 +215,20 @@ export function buildChatScreen(renderer: CliRenderer, onCancel: () => void): Bo
       footer.fg = THEME.yellow;
       return false;
     }
-    footer.content = `  Starting local model server on :${MODEL_SERVER_PORT}...`;
-    footer.fg = THEME.yellow;
-    startDaemon(LLAMAFILE_DEST, serverArgs(), { cwd: ROOT });
-    serverReady = await waitForServer();
+    if (!serverStarting) {
+      footer.content = `  Starting local model server on :${MODEL_SERVER_PORT}...`;
+      footer.fg = THEME.yellow;
+      startDaemon(LLAMAFILE_DEST, serverArgs(), { cwd: ROOT, logFile: MODEL_SERVER_LOG });
+      serverStarting = waitForServer((elapsed) => {
+        footer.content = `  Loading local model on :${MODEL_SERVER_PORT} (${elapsed}s elapsed)...`;
+        footer.fg = THEME.yellow;
+      });
+    }
+    serverReady = await serverStarting;
+    if (!serverReady) serverStarting = null;
     footer.content = serverReady
       ? `  Enter send    PageUp/PageDown scroll    Server :${MODEL_SERVER_PORT} ready`
-      : "  Model server did not respond yet. Try again in a moment.";
+      : `  Model server did not respond after 90s. See ${MODEL_SERVER_LOG}`;
     footer.fg = serverReady ? THEME.dim : THEME.yellow;
     return serverReady;
   }

@@ -33,6 +33,11 @@ cd twilioworld-agentic-coding-toolkit
 > Use `--recursive` so the Twilio Skills submodule comes down with the clone.
 > Forgot it? Setup (in the menu) runs `git submodule update --init` for you.
 
+If the first run behaves strangely, `./toolkit doctor` prints a read-only
+environment check: terminal/locale, required commands, Node version, submodule
+state, write access, disk space, and whether the local model/runtime are
+already installed.
+
 `./toolkit` is the command you use from the repo root. Arrow keys to navigate.
 The dashboard is a two-column OpenTUI app: actions on the left, status and
 selected-action details on the right.
@@ -138,7 +143,7 @@ pitfalls; Docs MCP retrieves current endpoint schemas and documentation details.
 
 - **Node.js**, **git**, **curl** (the script checks these)
 - A **Twilio account** (only needed for Execute MCP and Dev Phone)
-- ~2.5 GB free disk if you want the local Gemma model
+- ~3.3 GB free disk if you want the local Gemma model
 
 The toolkit can install the Twilio CLI, Dev Phone plugin, supported agent CLIs,
 llamafile runtime, and local Gemma model files when those choices are selected.

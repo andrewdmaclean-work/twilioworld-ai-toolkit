@@ -9,6 +9,7 @@ import { homedir, platform } from "os";
 import { join } from "path";
 import { capture, fileExecutable, have, runStreaming, type LogFn } from "./exec.ts";
 import { addonEnabled } from "./config.ts";
+import { twilioFactAt } from "./twilio-facts.ts";
 import {
   CONFIG_DIR,
   DOCS_MCP_URL,
@@ -17,7 +18,11 @@ import {
   GGUF_MMPROJ,
   GGUF_STAGING,
   LLAMAFILE_DEST,
+  LLAMAFILE_SIZE_BYTES,
+  LLAMAFILE_SIZE_LABEL,
   LLAMAFILE_URL,
+  LOCAL_MODEL_SIZE_BYTES,
+  LOCAL_MODEL_SIZE_LABEL,
   MODELS_DIR,
   ROOT,
   SKILLS_DIR,
@@ -32,11 +37,55 @@ function err(msg: string, onLog: LogFn) { onLog(`✗ ${msg}`, "stderr"); }
 function say(msg: string, onLog: LogFn) { onLog(msg, "stdout"); }
 function step(msg: string, onLog: LogFn) { onLog(`\n▶ ${msg}`, "stdout"); }
 
+function sizeLabel(bytes: number): string {
+  if (bytes < 1_048_576) return `${(bytes / 1024).toFixed(0)} KB`;
+  if (bytes < 1_073_741_824) return `${(bytes / 1_048_576).toFixed(1)} MB`;
+  return `${(bytes / 1_073_741_824).toFixed(2)} GB`;
+}
+
+function startProgressLogger(
+  dest: string,
+  totalBytes: number,
+  intervalMs: number,
+  onLog: LogFn,
+  opts: { facts?: boolean } = {},
+): ReturnType<typeof setInterval> {
+  let tick = 0;
+  if (opts.facts) onLog(`   Twilio AI tip: ${twilioFactAt(tick++)}`, "stdout");
+  return setInterval(() => {
+    try {
+      const downloaded = existsSync(dest) ? statSync(dest).size : 0;
+      const pct = totalBytes > 0 ? Math.min(100, Math.round((downloaded / totalBytes) * 100)) : 0;
+      onLog(`   downloading… ${sizeLabel(downloaded)} / ${sizeLabel(totalBytes)}  (${pct}%)`, "stdout");
+      if (opts.facts && tick % 5 === 0) onLog(`   Twilio AI tip: ${twilioFactAt(tick / 5)}`, "stdout");
+      tick++;
+    } catch { /* file not yet visible — ignore */ }
+  }, intervalMs);
+}
+
+function elapsedLabel(startedAt: number): string {
+  const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return `${minutes}m ${rest}s`;
+}
+
+function startExtractionLogger(onLog: LogFn): ReturnType<typeof setInterval> {
+  const startedAt = Date.now();
+  let tick = 0;
+  return setInterval(() => {
+    onLog(`   extracting… still working (${elapsedLabel(startedAt)} elapsed)`, "stdout");
+    if (tick % 3 === 0) onLog(`   Twilio AI tip: ${twilioFactAt(tick / 3)}`, "stdout");
+    tick++;
+  }, 5000);
+}
+
 // ── Security audit M-3/E-2: bound redirects and support resuming a
 // partial download instead of forcing a full re-download on a dropped
 // connection (common on shared/conference wifi with multi-GB payloads).
 function curlDownloadArgs(url: string, dest: string): string[] {
-  return ["-fL", "--max-redirs", "5", "-C", "-", "--progress-bar", url, "-o", dest];
+  return ["-fL", "--max-redirs", "5", "-C", "-", "--no-progress-meter", url, "-o", dest];
 }
 
 // ── Security audit C-1/H-3: a network failure or captive-portal page can
@@ -254,9 +303,11 @@ export async function runSetup(opts: {
     } else {
       // Llamafile runtime
       if (!runtimeOk()) {
-        say(`   Downloading llamafile runtime…`, onLog);
+        say(`   Downloading llamafile runtime (~${LLAMAFILE_SIZE_LABEL})…`, onLog);
         mkdirSync(TOOLS_DIR, { recursive: true });
+        const runtimeProgress = startProgressLogger(LLAMAFILE_DEST, LLAMAFILE_SIZE_BYTES, 3000, onLog);
         const res = await runStreaming("curl", curlDownloadArgs(LLAMAFILE_URL, LLAMAFILE_DEST), { cwd: ROOT, onLog });
+        clearInterval(runtimeProgress);
         if (res.ok && !looksLikeExecutable(LLAMAFILE_DEST)) {
           err("Downloaded file doesn't look like a real binary (captive portal page or corrupt transfer?) — removing it.", onLog);
           rmSync(LLAMAFILE_DEST, { force: true });
@@ -281,8 +332,10 @@ export async function runSetup(opts: {
 
         mkdirSync(MODELS_DIR, { recursive: true });
         if (!ggufStagingExists()) {
-          say("   Downloading Gemma 4 E2B from Kaggle (~2.5GB)…", onLog);
+          say(`   Downloading Gemma 4 E2B from Kaggle (~${LOCAL_MODEL_SIZE_LABEL})…`, onLog);
+          const weightsProgress = startProgressLogger(GGUF_STAGING, LOCAL_MODEL_SIZE_BYTES, 3000, onLog, { facts: true });
           const res = await runStreaming("curl", curlDownloadArgs(GGUF_URL, GGUF_STAGING), { cwd: ROOT, onLog });
+          clearInterval(weightsProgress);
           if (!res.ok) {
             err("Download failed — partial file kept at " + GGUF_STAGING + " so re-running Setup can resume it.", onLog);
           }
@@ -292,7 +345,7 @@ export async function runSetup(opts: {
         }
 
         if (ggufStagingExists()) {
-          say("   Extracting…", onLog);
+          say("   Extracting… this can take a few minutes on a Pi-class machine.", onLog);
           // Security audit C-3: the old predictable extraction path was
           // removed with rm -rf then recreated with mkdir -p, leaving a
           // gap an attacker on a shared/multi-user box could win by
@@ -300,7 +353,9 @@ export async function runSetup(opts: {
           // OS for an exclusively-created, unpredictable directory name
           // instead — there's no gap to race.
           const extractTmp = mkdtempSync(join(MODELS_DIR, "extract-"));
+          const extractProgress = startExtractionLogger(onLog);
           const tarRes = await runStreaming("tar", ["-xf", GGUF_STAGING, "-C", extractTmp], { cwd: ROOT, onLog });
+          clearInterval(extractProgress);
           if (!tarRes.ok) {
             err("Extraction failed", onLog);
           } else {
@@ -315,7 +370,7 @@ export async function runSetup(opts: {
               rmSync(extractTmp, { recursive: true, force: true });
               const sz = statSync(GGUF_DEST).size;
               ok(`Model ready (${(sz / 1_073_741_824).toFixed(1)}GB)`, onLog);
-              ok("Archive kept at " + GGUF_STAGING + " — delete it to reclaim ~2.5GB", onLog);
+              ok(`Archive kept at ${GGUF_STAGING} — delete it to reclaim ~${LOCAL_MODEL_SIZE_LABEL}`, onLog);
             } else {
               err("No main model GGUF found in archive. Left everything in place:", onLog);
               err("  Archive:   " + GGUF_STAGING, onLog);

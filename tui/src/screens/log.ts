@@ -86,10 +86,14 @@ export function buildLogScreen(
   body.add(scroll);
 
   let lineCount = 0;
+  let lastLogKey = "";
   const dismissGuard = createInputGuard();
 
   function onLog(line: string, stream: "stdout" | "stderr") {
     if (!line.trim()) return; // skip blank lines
+    const logKey = `${stream}:${line}`;
+    if (logKey === lastLogKey) return;
+    lastLogKey = logKey;
     lineCount++;
     scroll.content.add(
       new TextRenderable(renderer, {
@@ -117,7 +121,6 @@ export function buildLogScreen(
     renderer.keyInput.on("keypress", handler);
   }
 
-  onLog("Starting task...", "stdout");
   footer.content = "  Starting task...";
   footer.fg = THEME.yellow;
 
