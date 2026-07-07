@@ -9,7 +9,7 @@
     "dev": "bun --watch run src/index.ts"
   },
   "dependencies": {
-    "@opentui/core": "^0.4.2"
+    "@opentui/core": "0.4.2"
   },
   "devDependencies": {
     "@types/bun": "latest"
