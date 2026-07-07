@@ -13,9 +13,12 @@ import {
   LLAMAFILE_DEST,
   MODEL_SERVER_LOG,
   MODELS_DIR,
+  NPM_GLOBAL_PREFIX,
   ROOT,
   SKILLS_DIR,
   TOOLS_DIR,
+  TOOLCHAINS_DIR,
+  TWILIO_CLI_HOME,
   WHISPERFILE_DEST,
   WHISPER_MODEL_DEST,
   WHISPER_MODEL_STAGING,
@@ -98,19 +101,28 @@ async function removeApiKey(onLog: LogFn): Promise<boolean> {
 }
 
 async function removeTwilioCli(onLog: LogFn): Promise<boolean> {
-  step("Twilio CLI", onLog);
+  step("Toolkit-local Twilio CLI", onLog);
   if (!have("twilio")) {
-    ok("Twilio CLI not installed.", onLog);
+    ok("Toolkit-local Twilio CLI not installed.", onLog);
+    rmPath(TWILIO_CLI_HOME);
     return true;
   }
-  if (!have("npm")) {
-    warn("npm not found; remove Twilio CLI manually if needed.", onLog);
-    return false;
+  let okRemove = true;
+  if (have("npm")) {
+    const res = await runStreaming("npm", ["uninstall", "--prefix", NPM_GLOBAL_PREFIX, "-g", "twilio-cli"], { cwd: ROOT, onLog });
+    okRemove = res.ok;
+  } else {
+    warn("npm not found; removing local Twilio CLI files directly.", onLog);
   }
-  const res = await runStreaming("npm", ["uninstall", "-g", "twilio-cli"], { cwd: ROOT, onLog });
-  if (res.ok) ok("Twilio CLI removed.", onLog);
-  else err("Twilio CLI removal failed.", onLog);
-  return res.ok;
+  const removed = [
+    rmPath(join(NPM_GLOBAL_PREFIX, "bin", "twilio")),
+    rmPath(join(NPM_GLOBAL_PREFIX, "bin", "twilio.cmd")),
+    rmPath(join(NPM_GLOBAL_PREFIX, "lib", "node_modules", "twilio-cli")),
+    rmPath(TWILIO_CLI_HOME),
+  ].filter(Boolean).length;
+  if (okRemove) ok(`Removed toolkit-local Twilio CLI/profile files (${removed} path(s)).`, onLog);
+  else err("Twilio CLI npm removal failed.", onLog);
+  return okRemove;
 }
 
 function removeSkills(onLog: LogFn): boolean {
@@ -141,8 +153,9 @@ function removeToolkitState(onLog: LogFn): boolean {
     rmPath(CONFIG_FILE),
     rmPath(join(CONFIG_DIR, ".env")),
     rmPath(join(CONFIG_DIR, "pi-agent")),
+    rmPath(TOOLCHAINS_DIR),
   ].filter(Boolean).length;
-  if (removed) ok("Removed .toolkit config, creds file, and/or Pi state.", onLog);
+  if (removed) ok("Removed .toolkit config, creds file, Pi state, and/or local toolchains.", onLog);
   else ok("No local .toolkit state found.", onLog);
   return true;
 }
@@ -198,6 +211,6 @@ export async function runUninstall(opts: {
   }
 
   onLog("", "stdout");
-  ok("Uninstall flow complete. Twilio CLI profile is still signed in unless you run `twilio logout`.", onLog);
+  ok("Uninstall flow complete.", onLog);
   onDone(allOk);
 }

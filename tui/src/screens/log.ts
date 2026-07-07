@@ -73,7 +73,7 @@ export function buildLogScreen(
     id: "log-screen",
     route: "Dashboard / Task Log",
     title,
-    subtitle: "Streaming command output inside the OpenTUI session.",
+    subtitle: "",
     bodyTitle: "Live Output",
     footer: "  In-app task log    Waiting for command output",
   });

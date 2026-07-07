@@ -28,8 +28,8 @@ export interface CheckItem {
   heading?: boolean;
 }
 
-const CHECK = "[x]";
-const UNCHECK = "[ ]";
+const CHECK = "✓ DONE";
+const UNCHECK = "□ TODO";
 
 export class CheckList {
   readonly container: BoxRenderable;

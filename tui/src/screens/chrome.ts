@@ -52,11 +52,13 @@ export function buildRouteChrome(renderer: CliRenderer, opts: RouteChromeOptions
     content: opts.title,
     fg: THEME.white,
   }));
-  header.add(new TextRenderable(renderer, {
-    id: `${opts.id}-subtitle`,
-    content: opts.subtitle,
-    fg: THEME.yellow,
-  }));
+  if (opts.subtitle) {
+    header.add(new TextRenderable(renderer, {
+      id: `${opts.id}-subtitle`,
+      content: opts.subtitle,
+      fg: THEME.yellow,
+    }));
+  }
 
   const body = new BoxRenderable(renderer, {
     id: `${opts.id}-body`,
@@ -109,11 +111,13 @@ export function buildEmbeddedRouteChrome(renderer: CliRenderer, opts: RouteChrom
     content: opts.title,
     fg: THEME.white,
   }));
-  header.add(new TextRenderable(renderer, {
-    id: `${opts.id}-subtitle`,
-    content: opts.subtitle,
-    fg: THEME.yellow,
-  }));
+  if (opts.subtitle) {
+    header.add(new TextRenderable(renderer, {
+      id: `${opts.id}-subtitle`,
+      content: opts.subtitle,
+      fg: THEME.yellow,
+    }));
+  }
 
   const body = new BoxRenderable(renderer, {
     id: `${opts.id}-body`,

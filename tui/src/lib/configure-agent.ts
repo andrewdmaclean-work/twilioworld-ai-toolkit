@@ -185,8 +185,8 @@ export async function configureAgent(opts: {
     // ── Pi ───────────────────────────────────────────────────────────
     const nodeInfo = pathNodeVersion();
     if (!supportsPiNode(nodeInfo)) {
-      warn(`Pi requires Node >= 22.19.0 on PATH — node is ${nodeInfo?.raw ?? "not found"}.`, onLog);
-      warn("Run `nvm use 22` then re-run Configure agent.", onLog);
+      warn(`Pi requires project-local Node >= 22.19.0 — node is ${nodeInfo?.raw ?? "not found"}.`, onLog);
+      warn("Re-run ./toolkit to repair .toolkit/toolchains/node-v22, then re-run Configure agent.", onLog);
       onDone(false);
       return;
     }

@@ -145,15 +145,15 @@ pitfalls; Docs MCP retrieves current endpoint schemas and documentation details.
 - A **Twilio account** (only needed for Execute MCP and Dev Phone)
 - ~3.3 GB free disk if you want the local Gemma model
 
-The toolkit can install the Twilio CLI, Dev Phone plugin, supported agent CLIs,
+The toolkit can install isolated toolkit-local Bun/Node toolchains, Twilio CLI, Dev Phone plugin, supported agent CLIs,
 llamafile runtime, and local Gemma model files when those choices are selected.
 
 ---
 
 ## What the setup does
 
-1. **Prerequisites** — verifies node, git, curl.
-2. **Twilio CLI** — installs if needed for Execute MCP or Dev Phone, then checks for an active login.
+1. **Prerequisites** — verifies git/curl and uses project-local Bun + Node from `.toolkit/toolchains/`.
+2. **Twilio CLI** — installs a toolkit-local copy under `.toolkit/npm-global` if needed for Execute MCP or Dev Phone, then checks for an active login in `.toolkit/twilio-cli-home`.
 3. **API key** — mints a scoped key via `twilio api:core:keys:create` for the Execute MCP, so your root Auth Token never lands in a config string.
 4. **Local model** — downloads the llamafile runtime + Gemma 4 E2B weights only if selected.
 5. **Dev Phone** — installs the plugin only if selected.
@@ -284,8 +284,7 @@ That single step:
 - attaches your selected Skills, Docs MCP, and/or Execute MCP automatically
 - opens Pi in a brand-new terminal window — the dashboard keeps running in this one
 
-> **Requires Node ≥ 22.19.0.** Node 18/20 crash Pi. Run `nvm use 22` first if needed —
-> Configure agent will tell you if your Node version is too old.
+> **Requires Node ≥ 22.19.0.** Node 18/20 crash Pi. `./toolkit` installs a project-local Node under `.toolkit/toolchains/node-v22/`, and Configure agent will tell you if that local Node is missing or too old.
 
 Pi is intentionally lightweight. It is the right tool for focused Twilio tasks, quick
 questions, and iterating on code, with no API key required. For long multi-tool agent
@@ -458,8 +457,10 @@ container. The footprint is small and fully reversible:
 
 | Added | Where | Removed by |
 | --- | --- | --- |
-| Twilio CLI | npm global | `uninstall.sh` |
-| Dev Phone plugin | Twilio CLI plugins | `uninstall.sh` |
+| Toolkit-local Bun + Node | `.toolkit/toolchains/` | `uninstall.sh` |
+| Toolkit-local Twilio CLI | `.toolkit/npm-global/` | `uninstall.sh` |
+| Toolkit-local Twilio CLI profiles/plugins | `.toolkit/twilio-cli-home/` | `uninstall.sh` |
+| Dev Phone plugin | toolkit-local Twilio CLI plugins | `uninstall.sh` |
 | Scoped API key | your Twilio account | `uninstall.sh` |
 | Skills copy | `~/.agents/skills/twilio/`, `~/.agents/skills/sendgrid/` | `uninstall.sh` |
 | Local toolkit copy of Skills | `vendor/twilio-ai/skills/` | `uninstall.sh` |
@@ -471,8 +472,8 @@ container. The footprint is small and fully reversible:
 ./uninstall.sh         # same cleanup from a shell, with a confirmation per item
 ```
 
-`uninstall.sh` never runs `twilio logout` — your CLI profile stays put unless you
-ask for it.
+The toolkit does not read or mutate your normal system Twilio CLI profile. Its
+login, profiles, cache, and plugins live under `.toolkit/twilio-cli-home/`.
 
 > Want full isolation anyway? Run the repo inside a devcontainer/VM — but note
 > Dev Phone needs browser + port access and llamafile won't get GPU acceleration

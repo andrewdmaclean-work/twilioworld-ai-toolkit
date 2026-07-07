@@ -11,8 +11,10 @@ import { addonEnabled } from "./config.ts";
 import { installLocalModel } from "./model-install.ts";
 import {
   CONFIG_DIR,
+  NPM_GLOBAL_PREFIX,
   ROOT,
   SKILLS_DIR,
+  TWILIO_CLI_HOME,
 } from "./constants.ts";
 
 function ok(msg: string, onLog: LogFn) { onLog(`✓ ${msg}`, "stdout"); }
@@ -72,19 +74,21 @@ export async function runSetup(opts: {
   stepDone("[1/6] Checking prerequisites", onLog);
 
   // ── Step 2: Twilio CLI ─────────────────────────────────────────────
-  step("☐ [2/6] Twilio CLI", onLog);
+  step("☐ [2/6] Toolkit-local Twilio CLI", onLog);
   if (have("twilio")) {
-    ok(`twilio CLI  ${capture("twilio", ["--version"]).split("\n")[0]}`, onLog);
+    ok(`toolkit-local twilio CLI  ${capture("twilio", ["--version"]).split("\n")[0]}`, onLog);
+    ok(`profiles isolated under ${TWILIO_CLI_HOME}`, onLog);
   } else if (addonEnabled("devPhone")) {
-    warn("Twilio CLI not found — installing (required for Dev Phone)", onLog);
-    const res = await runStreaming("npm", ["install", "-g", "twilio-cli"], { cwd: ROOT, onLog });
+    warn("Toolkit-local Twilio CLI not found — installing (required for Dev Phone)", onLog);
+    const res = await runStreaming("npm", ["install", "--prefix", NPM_GLOBAL_PREFIX, "-g", "twilio-cli"], { cwd: ROOT, onLog });
     if (!res.ok) { err("twilio-cli install failed — see https://www.twilio.com/docs/twilio-cli/quickstart", onLog); onDone(false); return; }
-    ok("Twilio CLI installed", onLog);
+    ok(`Twilio CLI installed under ${NPM_GLOBAL_PREFIX}`, onLog);
+    ok(`profiles isolated under ${TWILIO_CLI_HOME}`, onLog);
   } else {
-    warn("Twilio CLI not installed — not needed for your selected choices", onLog);
+    warn("Toolkit-local Twilio CLI not installed — not needed for your selected choices", onLog);
     say("   (Install it later if you want the Execute MCP or Dev Phone.)", onLog);
   }
-  stepDone("[2/6] Twilio CLI", onLog);
+  stepDone("[2/6] Toolkit-local Twilio CLI", onLog);
 
   // ── Twilio account (optional — only needed for Execute MCP) ────────
   let activeAccountSid = "";

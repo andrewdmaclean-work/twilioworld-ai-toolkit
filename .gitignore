@@ -17,6 +17,9 @@ tools/whisperfile.exe
 .env.local
 .toolkit/config.json
 .toolkit/pi-agent/
+.toolkit/toolchains/
+.toolkit/npm-global/
+.toolkit/twilio-cli-home/
 .toolkit/webui/
 .pi/auth.json
 .pi/*cache*.json

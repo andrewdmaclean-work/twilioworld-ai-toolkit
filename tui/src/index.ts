@@ -90,8 +90,8 @@ function assertCompatibleNode(): void {
   if (process.env.TOOLKIT_TUI_SMOKE === "1") return;
   const nodeInfo = pathNodeVersion();
   if (!supportsPiNode(nodeInfo)) {
-    console.error("TwilioWorld Agentic Coding Toolkit requires Node >= 22.19.0 on PATH.");
-    console.error(`Current node is ${nodeInfo?.raw ?? "not found"}. Run: nvm install 22 && nvm use 22`);
+    console.error("TwilioWorld Agentic Coding Toolkit requires project-local Node >= 22.19.0.");
+    console.error(`Current node is ${nodeInfo?.raw ?? "not found"}. Re-run ./toolkit so it can repair .toolkit/toolchains/node-v22.`);
     process.exit(2);
   }
 }
@@ -273,7 +273,7 @@ function detailFor(item: MenuItem | undefined, s: ToolkitStatus | null): string 
         "  Browser soft phone — send/receive real SMS and voice with no device.",
         "",
         "Status",
-        `  Twilio CLI installed: ${yesNo(Boolean(s?.twilio.installed))}`,
+        `  Toolkit-local Twilio CLI installed: ${yesNo(Boolean(s?.twilio.installed))}`,
         `  Dev Phone installed: ${yesNo(Boolean(s?.devPhone.installed))}`,
         `  Logged in: ${yesNo(Boolean(s?.twilio.sid))}`,
         "",
@@ -886,8 +886,8 @@ async function main() {
 	            {
 	              name: doneLabel(Boolean(latestStatus?.twilio.installed), "Open a terminal"),
 	              description: latestStatus?.twilio.installed
-	                ? "Twilio CLI installed — open a new terminal"
-	                : "Twilio CLI not installed — install then open terminal",
+	                ? "toolkit-local Twilio CLI installed — open an isolated terminal"
+	                : "toolkit-local Twilio CLI not installed — install then open terminal",
 	              onSelect: () => {
                 if (!have("twilio")) {
                   runAction("Install Twilio CLI", (onLog, onDone) => installTwilioCli({ onLog, onDone }));
@@ -917,9 +917,9 @@ async function main() {
 	              name: "Switch account",
 	              description: latestStatus?.twilio.sid
 	                ? `active: ${latestStatus.twilio.profile}`
-	                : "choose among your configured Twilio CLI profiles",
+	                : "choose among this toolkit's isolated Twilio CLI profiles",
               onSelect: () => {
-                if (!have("twilio")) { flash("⚠  Twilio CLI not installed", YELLOW); return true; }
+                if (!have("twilio")) { flash("⚠  Toolkit-local Twilio CLI not installed", YELLOW); return true; }
                 const profiles = listTwilioProfiles();
                 if (profiles.length === 0) { flash("⚠  No profiles — use Log in first", YELLOW); return false; }
                 if (profiles.length === 1) { flash(`Only one account: ${profiles[0].id}`, YELLOW); return false; }
@@ -950,7 +950,7 @@ async function main() {
 	              name: doneLabel(Boolean(latestStatus?.twilio.sid), "Account status"),
 	              description: latestStatus?.twilio.sid ? `${latestStatus.twilio.profile} (${latestStatus.twilio.sid})` : "not logged in",
               onSelect: () => {
-                if (!have("twilio")) { flash("⚠  Twilio CLI not installed", YELLOW); return true; }
+                if (!have("twilio")) { flash("⚠  Toolkit-local Twilio CLI not installed", YELLOW); return true; }
                 flash(latestStatus?.twilio.sid ? `✓  ${latestStatus.twilio.profile} — ${latestStatus.twilio.sid}` : "Not logged in — use Login", latestStatus?.twilio.sid ? GREEN : YELLOW);
                 return true;
               },
@@ -959,7 +959,7 @@ async function main() {
 	              name: doneLabel(Boolean(process.env.TWILIO_MCP_CREDS), "Enable Execute MCP (read-only)"),
 	              description: process.env.TWILIO_MCP_CREDS ? "creds already loaded" : "create a read-only API key so agents can inspect your account",
               onSelect: () => {
-                if (!have("twilio")) { flash("⚠  Twilio CLI not installed", YELLOW); return false; }
+                if (!have("twilio")) { flash("⚠  Toolkit-local Twilio CLI not installed", YELLOW); return false; }
                 // Restricted-key creation needs the Account SID + Auth Token
                 // (the CLI's stored API key can't create keys). Prompt for them.
                 showRoute(buildCredsPromptScreen(renderer, {
@@ -981,7 +981,7 @@ async function main() {
             },
 	            {
 	              name: "Uninstall Twilio CLI",
-	              description: latestStatus?.twilio.installed ? "npm uninstall -g twilio-cli" : "not installed",
+	              description: latestStatus?.twilio.installed ? "remove .toolkit-local Twilio CLI + profiles" : "not installed",
               onSelect: () => {
                 runAction("Uninstall Twilio CLI", (onLog, onDone) => runUninstall({ keys: ["twilioCli"] as UninstallKey[], onLog, onDone }));
                 return false;

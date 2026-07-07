@@ -68,7 +68,7 @@ export type PiReadiness =
 
 export function checkPiReadiness(): PiReadiness {
   if (!localGemmaAvailable()) return { ok: false, reason: "Local Gemma model not available. Run Setup to download it." };
-  if (!nodeSupportsPi()) return { ok: false, reason: `Pi requires Node >= 22.19.0 on PATH — node is ${piNodeVersionLabel()}. Run: nvm use 22` };
+  if (!nodeSupportsPi()) return { ok: false, reason: `Pi requires project-local Node >= 22.19.0 — node is ${piNodeVersionLabel()}. Re-run ./toolkit to repair .toolkit/toolchains/node-v22.` };
   if (!have("pi")) return { ok: false, reason: "Pi is not installed. Run Configure agent." };
   return { ok: true };
 }

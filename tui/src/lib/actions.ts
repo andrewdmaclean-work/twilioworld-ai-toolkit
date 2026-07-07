@@ -4,9 +4,9 @@
 // user never has to visit a monolithic "Setup" screen.
 
 import { join } from "path";
-import { capture, have, killModelServer, openInNewWindow, runStreaming, type LogFn, type NewWindowResult } from "./exec.ts";
+import { capture, have, killModelServer, openInNewWindow, runStreaming, twilioCliEnv, type LogFn, type NewWindowResult } from "./exec.ts";
 import { installLocalModel } from "./model-install.ts";
-import { ROOT } from "./constants.ts";
+import { NPM_GLOBAL_PREFIX, ROOT, TWILIO_CLI_HOME } from "./constants.ts";
 
 function ok(msg: string, onLog: LogFn) { onLog(`✓ ${msg}`, "stdout"); }
 function warn(msg: string, onLog: LogFn) { onLog(`⚠  ${msg}`, "stderr"); }
@@ -21,14 +21,18 @@ export async function downloadLocalModel(opts: { onLog: LogFn; onDone: (ok: bool
   onDone(ok);
 }
 
-/** Install the Twilio CLI globally via npm. */
+/** Install a toolkit-local Twilio CLI via npm. */
 export async function installTwilioCli(opts: { onLog: LogFn; onDone: (ok: boolean) => void }): Promise<void> {
   const { onLog, onDone } = opts;
-  step("Twilio CLI", onLog);
+  step("Toolkit-local Twilio CLI", onLog);
   if (have("twilio")) { ok(`Already installed  ${capture("twilio", ["--version"]).split("\n")[0]}`, onLog); onDone(true); return; }
   if (!have("npm")) { err("npm not found — install Node.js first.", onLog); onDone(false); return; }
-  const res = await runStreaming("npm", ["install", "-g", "twilio-cli"], { cwd: ROOT, onLog });
-  if (res.ok) { ok("Twilio CLI installed", onLog); onDone(true); }
+  const res = await runStreaming("npm", ["install", "--prefix", NPM_GLOBAL_PREFIX, "-g", "twilio-cli"], { cwd: ROOT, onLog });
+  if (res.ok) {
+    ok(`Twilio CLI installed under ${NPM_GLOBAL_PREFIX}`, onLog);
+    ok(`Twilio CLI profiles are isolated under ${TWILIO_CLI_HOME}`, onLog);
+    onDone(true);
+  }
   else { err("Install failed — see https://www.twilio.com/docs/twilio-cli/quickstart", onLog); onDone(false); }
 }
 
@@ -52,10 +56,10 @@ export function openDevPhone(): NewWindowResult {
   return openInNewWindow("twilio", ["dev-phone"], { cwd: ROOT });
 }
 
-/** Open a new terminal with the Twilio CLI on PATH. */
+/** Open a new terminal with the isolated Twilio CLI on PATH. */
 export function openTwilioTerminal(): NewWindowResult {
   // Drop into an interactive shell so the user can run twilio commands.
-  return openInNewWindow(process.env.SHELL || "bash", [], { cwd: ROOT });
+  return openInNewWindow(process.env.SHELL || "bash", [], { cwd: ROOT, env: twilioCliEnv() });
 }
 
 /** Launch `twilio login` in a new terminal (interactive prompts). */
@@ -122,19 +126,22 @@ function looksLikeMcpCreds(creds: string): boolean {
   return /^AC[a-fA-F0-9]{32}\/SK[a-fA-F0-9]{32}:.+$/.test(creds);
 }
 
-// Read-only restricted-key policy.
-//
-// The v1 Keys API takes a Policy of the form { "allow": ["/twilio/.../read", ...] }
-// — a flat list of named permission strings. Only permission strings from
-// Twilio's catalog are accepted; an unknown string causes error 70002 and
-// rejects the whole key. Twilio's official docs currently document exactly
-// one such string (messaging read), so we use that as the reliable default.
-// The full catalog lives in the per-product PDFs at:
-// https://www.twilio.com/docs/iam/api-keys/restricted-api-keys
-// (Add more here only once verified against a real account.)
+// Read-only restricted-key policy for the TwilioWorld puzzle/demo account.
+// The v1 Keys API takes a Policy of the form { "allow": ["/twilio/.../read"] }.
+// These are Twilio restricted-key permission strings, not raw REST URLs.
 function readOnlyAllowList(): string[] {
   return [
+    // Track 2 + finale: inspect inbound/outbound SMS logs only.
     "/twilio/messaging/messages/read",
+    // Track 1: Conversation Intelligence services, transcripts, sentences.
+    "/twilio/intelligence/services/read",
+    "/twilio/intelligence/transcripts/read",
+    "/twilio/intelligence/transcripts/sentences/read",
+    // Track 3: Enterprise Knowledge KBs and raw text knowledge entries.
+    "/twilio/knowledge/knowledge-bases/read",
+    "/twilio/knowledge/knowledge/read",
+    // Track 4: Conversation Intelligence custom operator config.prompt.
+    "/twilio/intelligence/operators/custom/read",
   ];
 }
 
@@ -147,7 +154,7 @@ export async function setupExecuteMcp(opts: { accountSid: string; authToken: str
   step("Execute MCP — read-only API key", onLog);
 
   if (!have("twilio")) {
-    err("Twilio CLI not installed. Install it first (Twilio CLI → Open a terminal).", onLog);
+    err("Toolkit-local Twilio CLI not installed. Install it first (Twilio CLI → Open a terminal).", onLog);
     onDone(false); return;
   }
   if (!/^AC[a-fA-F0-9]{32}$/.test(accountSid) || !authToken) {
@@ -165,8 +172,8 @@ export async function setupExecuteMcp(opts: { accountSid: string; authToken: str
   };
 
   warn("This creates a RESTRICTED, READ-ONLY key for the Execute MCP.", onLog);
-  warn("Agents can inspect the account (messages, calls, numbers, usage) but", onLog);
-  warn("cannot send, create, update, or delete anything.", onLog);
+  warn("Agents can inspect puzzle clues in Messaging, Intelligence, and Knowledge.", onLog);
+  warn("No send, create, update, or delete permission is granted.", onLog);
   say("   The Auth Token is used only for this request and is never saved.", onLog);
 
   const keysJson = capture("twilio", ["api:core:keys:list", "-o", "json"], authEnv);
@@ -227,9 +234,7 @@ export async function setupExecuteMcp(opts: { accountSid: string; authToken: str
     writeFileSync(envFile, `export TWILIO_MCP_CREDS="${creds}"\n`, { mode: 0o600 });
     chmod(envFile, 0o600);
     ok(`Restricted read-only API key created (${keySid})`, onLog);
-    ok("Scope: read-only for Messaging (list + fetch messages).", onLog);
-    say("   To grant read access to more products, edit the key's permissions", onLog);
-    say("   in the Console: https://www.twilio.com/docs/iam/api-keys/keys-in-console", onLog);
+    ok("Scope: read-only for Messaging logs, Conversation Intelligence, Enterprise Knowledge, and Custom Operators.", onLog);
     ok(`Saved to ${envFile} — chmod 600, gitignored, never printed here.`, onLog);
     say("   (Your Auth Token was NOT saved — only the read-only key.)", onLog);
     say("", onLog);

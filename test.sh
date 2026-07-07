@@ -25,12 +25,15 @@ check() {
 echo "── Entry point ──"
 check "toolkit entry exists"          test -f toolkit
 check "toolkit is executable"         test -x toolkit
-check "toolkit invokes OpenTUI"       grep -q 'bun run src/index.ts' toolkit
+check "toolkit invokes OpenTUI"       grep -q 'run src/index.ts' toolkit
 check "toolkit has doctor command"    bash -c '
   grep -q "run_doctor" toolkit &&
   grep -q "TwilioWorld Toolkit Doctor" toolkit &&
   grep -q "git submodule update --init --recursive" toolkit &&
-  grep -q "model reasoning" toolkit
+  grep -q "model reasoning" toolkit &&
+  grep -q "project-local bun" toolkit &&
+  grep -q "project-local Node" toolkit &&
+  grep -q "toolkit-local Twilio CLI" toolkit
 '
 
 echo "── TypeScript project ──"
@@ -51,6 +54,11 @@ check "submodule populated"           test -f vendor/twilio-ai/skills/README.md
 check ".gitignore ignores gguf"       grep -q 'models/\*.gguf' .gitignore
 check ".gitignore ignores add-on config" grep -q '.toolkit/config.json' .gitignore
 check ".gitignore ignores Pi state"   grep -q '.toolkit/pi-agent/' .gitignore
+check ".gitignore ignores toolkit-local tools" bash -c '
+  grep -q ".toolkit/toolchains/" .gitignore &&
+  grep -q ".toolkit/npm-global/" .gitignore &&
+  grep -q ".toolkit/twilio-cli-home/" .gitignore
+'
 check "opencode.json valid JSON"      bash -c 'command -v jq && jq empty opencode.json || python3 -c "import json,sys; json.load(open(\"opencode.json\"))"'
 check "opencode.json has docs MCP"    grep -q 'mcp.twilio.com/docs' opencode.json
 check "opencode.json has execute MCP" grep -q 'twilio-execute' opencode.json
@@ -173,7 +181,9 @@ check "setup menu reflects completed installs" bash -c '
   grep -q "buildAddonItems" tui/src/screens/setup.ts &&
   grep -q "modelReady" tui/src/screens/setup.ts &&
   grep -q "devPhoneInstalled" tui/src/screens/setup.ts &&
-  grep -q "item.done" tui/src/screens/setup.ts
+  grep -q "item.done" tui/src/screens/setup.ts &&
+  grep -q "✓ DONE" tui/src/checklist.ts &&
+  grep -q "□ TODO" tui/src/checklist.ts
 '
 check "setup progress shows completed steps" bash -c '
   grep -q "stepDone" tui/src/lib/setup.ts &&
@@ -300,12 +310,28 @@ check "raspbian terminal has UTF-8 fonts" bash -c '
   grep -q "export LANG=en_US.UTF-8" demo/raspbian/Dockerfile
 '
 check "shell prompts read from terminal" bash -c '
-  grep -q "ask_install_node" toolkit &&
-  grep -q "/dev/tty" toolkit &&
   grep -q "/dev/tty" uninstall.sh &&
-  grep -q "\[y/n\]" toolkit &&
   grep -q "\[y/n\]" uninstall.sh &&
   ! grep -RIn "read -r -p" toolkit uninstall.sh 2>/dev/null
+'
+check "toolkit toolchains are project-local" bash -c '
+  grep -q "CONFIG_DIR=.*\\.toolkit" toolkit &&
+  grep -q "TOOLCHAINS_DIR=.*CONFIG_DIR.*/toolchains" toolkit &&
+  grep -q "BUN_INSTALL=.*TOOLCHAINS_DIR.*/bun" toolkit &&
+  grep -q "BUN_BIN=.*BUN_INSTALL.*/bin/bun" toolkit &&
+  grep -q "NODE_HOME=.*TOOLCHAINS_DIR.*/node-v22" toolkit &&
+  grep -q "NODE_BIN=.*NODE_HOME.*/bin/node" toolkit &&
+  grep -q "nodejs.org/dist" toolkit &&
+  grep -q "oven-sh/bun/releases" toolkit &&
+  ! grep -q "raw.githubusercontent.com/nvm-sh/nvm" toolkit &&
+  ! grep -q "nvm install" toolkit
+'
+check "toolkit command env isolates managed CLIs" bash -c '
+  grep -q "TOOLKIT_LOCAL_ONLY_BINS = new Set(\\[\"bun\", \"node\", \"npm\", \"npx\", \"twilio\", \"pi\"\\])" tui/src/lib/exec.ts &&
+  grep -q "TWILIO_CLI_HOME" tui/src/lib/exec.ts &&
+  grep -q "NPM_GLOBAL_PREFIX" tui/src/lib/exec.ts &&
+  grep -q "toolkitEnv" tui/src/lib/exec.ts &&
+  grep -q "twilioCliEnv" tui/src/lib/exec.ts
 '
 check "setup subprocesses cannot consume TUI input" grep -q 'stdio: \["ignore", "pipe", "pipe"\]' tui/src/lib/exec.ts
 check "streaming logs sanitize terminal progress" bash -c '
@@ -329,8 +355,11 @@ check "route transitions ignore carried enter" bash -c '
 check "log dismissal uses explicit keys" bash -c '
   grep -q "isDismissKey" tui/src/screens/log.ts &&
   grep -q "Enter, Escape, Space, or q" tui/src/screens/log.ts &&
+  grep -q "subtitle: \"\"" tui/src/screens/log.ts &&
+  grep -q "if (opts.subtitle)" tui/src/screens/chrome.ts &&
   ! grep -q "press any key" tui/src/screens/log.ts &&
-  ! grep -q "onLog(\"Starting task" tui/src/screens/log.ts
+  ! grep -q "onLog(\"Starting task" tui/src/screens/log.ts &&
+  ! grep -q "Streaming command output inside the OpenTUI session" tui/src/screens/log.ts
 '
 check "no gum references remain"      bash -c '! grep -RIn "\bgum\b" README.md uninstall.sh tui/src tui/package.json 2>/dev/null'
 check "no plain UI fallback remains"  bash -c '! grep -RIn "src/plain\|TOOLKIT_PLAIN\|--plain" toolkit tui/src tui/package.json 2>/dev/null'
@@ -367,6 +396,20 @@ check "C-1/H-3 magic-byte check before chmod +x" grep -q 'looksLikeExecutable' t
 check "C-2/H-1/H-2 creds written chmod 600, not printed" bash -c 'grep -q "writeMcpCredsFile" tui/src/lib/setup.ts && grep -q "0o600" tui/src/lib/setup.ts && ! grep -q "TWILIO_MCP_CREDS=\${mcpCreds}" tui/src/lib/setup.ts'
 check "C-3 extraction uses mkdtemp, not predictable path" bash -c 'grep -q "mkdtempSync" tui/src/lib/model-install.ts && ! grep -q "extract_tmp" tui/src/lib/model-install.ts'
 check "C-4 creds format validated"    grep -q 'looksLikeMcpCreds' tui/src/lib/setup.ts
+check "Execute MCP restricted key has puzzle read scopes only" bash -c '
+  grep -q "/twilio/messaging/messages/read" tui/src/lib/actions.ts &&
+  grep -q "/twilio/intelligence/services/read" tui/src/lib/actions.ts &&
+  grep -q "/twilio/intelligence/transcripts/read" tui/src/lib/actions.ts &&
+  grep -q "/twilio/intelligence/transcripts/sentences/read" tui/src/lib/actions.ts &&
+  grep -q "/twilio/knowledge/knowledge-bases/read" tui/src/lib/actions.ts &&
+  grep -q "/twilio/knowledge/knowledge/read" tui/src/lib/actions.ts &&
+  grep -q "/twilio/intelligence/operators/custom/read" tui/src/lib/actions.ts &&
+  grep -q "No send, create, update, or delete permission" tui/src/lib/actions.ts &&
+  ! grep -q "/send" tui/src/lib/actions.ts &&
+  ! grep -q "/create" tui/src/lib/actions.ts &&
+  ! grep -q "/update" tui/src/lib/actions.ts &&
+  ! grep -q "/delete" tui/src/lib/actions.ts
+'
 check "M-1 PORT/CTX_SIZE validated"   grep -q 'validDigits' tui/src/lib/model.ts
 check "demo desktops avoid model/noVNC port collision" bash -c '
   grep -q "MODEL_SERVER_PORT=8082" demo/raspbian/Dockerfile &&

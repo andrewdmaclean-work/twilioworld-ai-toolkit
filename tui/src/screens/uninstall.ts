@@ -20,7 +20,7 @@ const UNINSTALL_ITEMS: UninstallItem[] = [
   { key: "__twilio", label: "Twilio account and CLI", description: "Remove optional Twilio tooling or the toolkit-created API key.", heading: true },
   { key: "devPhone" as UninstallKey, label: "Dev Phone plugin", description: "Remove @twilio-labs/plugin-dev-phone from the Twilio CLI" },
   { key: "apiKey" as UninstallKey, label: "Toolkit API key", description: "Delete the Twilio API key named twilioworld-toolkit" },
-  { key: "twilioCli" as UninstallKey, label: "Global Twilio CLI", description: "Run npm uninstall -g twilio-cli" },
+  { key: "twilioCli" as UninstallKey, label: "Toolkit-local Twilio CLI", description: "Remove .toolkit/npm-global and isolated Twilio CLI profile state" },
   { key: "__agents", label: "Coding agents", description: "Remove Twilio Skills installed where agents look for them.", heading: true },
   { key: "skills" as UninstallKey, label: "Twilio Skills installed for agents", description: "Remove twilio/ and sendgrid/ from ~/.agents/skills/" },
   { key: "__local", label: "Local toolkit files", description: "Remove files used by this toolkit on this machine.", heading: true },

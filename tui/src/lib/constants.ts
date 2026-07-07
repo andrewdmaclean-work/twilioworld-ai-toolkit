@@ -41,6 +41,15 @@ export const CONFIG_FILE = join(CONFIG_DIR, "config.json");
 export const ENV_FILE = join(CONFIG_DIR, ".env");
 export const DEFAULT_CONFIG_FILE = join(ROOT, "toolkit.defaults.json");
 export const LEGACY_DEFAULT_CONFIG_FILE = join(CONFIG_DIR, "defaults.json");
+export const TOOLCHAINS_DIR = join(CONFIG_DIR, "toolchains");
+export const BUN_INSTALL_DIR = join(TOOLCHAINS_DIR, "bun");
+export const BUN_BIN_DIR = join(BUN_INSTALL_DIR, "bin");
+export const NODE_INSTALL_DIR = join(TOOLCHAINS_DIR, "node-v22");
+export const NODE_BIN_DIR = join(NODE_INSTALL_DIR, "bin");
+export const NPM_GLOBAL_PREFIX = join(CONFIG_DIR, "npm-global");
+export const NPM_GLOBAL_BIN_DIR = join(NPM_GLOBAL_PREFIX, "bin");
+export const TWILIO_CLI_HOME = join(CONFIG_DIR, "twilio-cli-home");
+export const TOOLKIT_BIN_DIRS = [NPM_GLOBAL_BIN_DIR, BUN_BIN_DIR, NODE_BIN_DIR];
 
 export const PI_AGENT_DIR = join(CONFIG_DIR, "pi-agent");
 export const PI_MODELS_JSON = join(ROOT, ".pi", "models.json");

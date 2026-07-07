@@ -24,8 +24,17 @@ import { spawn, spawnSync, type ChildProcess } from "child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { execSync } from "child_process";
 import { tmpdir } from "os";
-import { dirname, join } from "path";
-import { MCP_PROXY_PID, MCP_PROXY_PORT, MCP_PROXY_SCRIPT, MODEL_SERVER_PID, MODEL_SERVER_PORT } from "./constants.ts";
+import { delimiter, dirname, join } from "path";
+import {
+  MCP_PROXY_PID,
+  MCP_PROXY_PORT,
+  MCP_PROXY_SCRIPT,
+  MODEL_SERVER_PID,
+  MODEL_SERVER_PORT,
+  NPM_GLOBAL_PREFIX,
+  TOOLKIT_BIN_DIRS,
+  TWILIO_CLI_HOME,
+} from "./constants.ts";
 
 export type LogFn = (line: string, stream: "stdout" | "stderr") => void;
 
@@ -42,6 +51,58 @@ function q(arg: string): string {
 /** Build a /bin/sh -c invocation string from command + args. */
 function shCmd(command: string, args: string[]): string {
   return [command, ...args].map(q).join(" ");
+}
+
+const TOOLKIT_LOCAL_ONLY_BINS = new Set(["bun", "node", "npm", "npx", "twilio", "pi"]);
+
+function commandNames(bin: string): string[] {
+  return process.platform === "win32"
+    ? [bin, `${bin}.cmd`, `${bin}.exe`, `${bin}.ps1`]
+    : [bin];
+}
+
+function localCommandPath(bin: string): string {
+  for (const dir of TOOLKIT_BIN_DIRS) {
+    for (const name of commandNames(bin)) {
+      const candidate = join(dir, name);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return "";
+}
+
+function commandForSpawn(command: string): string | null {
+  if (!TOOLKIT_LOCAL_ONLY_BINS.has(command)) return command;
+  return localCommandPath(command) || null;
+}
+
+export function toolkitEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  const currentPath = extra.PATH ?? process.env.PATH ?? "";
+  return {
+    ...process.env,
+    ...extra,
+    PATH: [...TOOLKIT_BIN_DIRS, currentPath].filter(Boolean).join(delimiter),
+    npm_config_prefix: extra.npm_config_prefix ?? process.env.npm_config_prefix ?? NPM_GLOBAL_PREFIX,
+    NPM_CONFIG_PREFIX: extra.NPM_CONFIG_PREFIX ?? process.env.NPM_CONFIG_PREFIX ?? NPM_GLOBAL_PREFIX,
+  };
+}
+
+export function twilioCliEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  const env = toolkitEnv(extra);
+  mkdirSync(TWILIO_CLI_HOME, { recursive: true });
+  return {
+    ...env,
+    HOME: TWILIO_CLI_HOME,
+    USERPROFILE: TWILIO_CLI_HOME,
+    XDG_CONFIG_HOME: join(TWILIO_CLI_HOME, ".config"),
+    XDG_CACHE_HOME: join(TWILIO_CLI_HOME, ".cache"),
+    XDG_DATA_HOME: join(TWILIO_CLI_HOME, ".local", "share"),
+    XDG_STATE_HOME: join(TWILIO_CLI_HOME, ".local", "state"),
+  };
+}
+
+function commandEnv(command: string, extra?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return command === "twilio" ? twilioCliEnv(extra) : toolkitEnv(extra);
 }
 
 function stripTerminalControls(text: string): string {
@@ -87,9 +148,15 @@ export function runStreaming(
   opts: { cwd?: string; env?: NodeJS.ProcessEnv; onLog: LogFn },
 ): Promise<RunResult> {
   return new Promise((resolve) => {
-    const child = spawn("/bin/sh", ["-c", shCmd(command, args)], {
+    const resolved = commandForSpawn(command);
+    if (!resolved) {
+      opts.onLog(`${command} is not installed in this toolkit environment.`, "stderr");
+      resolve({ code: 127, ok: false });
+      return;
+    }
+    const child = spawn("/bin/sh", ["-c", shCmd(resolved, args)], {
       cwd: opts.cwd,
-      env: opts.env ?? process.env,
+      env: commandEnv(command, opts.env),
       stdio: ["ignore", "pipe", "pipe"],
     });
 
@@ -118,9 +185,11 @@ export function runTakeover(
   args: string[],
   opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
 ): RunResult {
-  const res = spawnSync("/bin/sh", ["-c", shCmd(command, args)], {
+  const resolved = commandForSpawn(command);
+  if (!resolved) return { code: 127, ok: false };
+  const res = spawnSync("/bin/sh", ["-c", shCmd(resolved, args)], {
     cwd: opts.cwd,
-    env: opts.env ?? process.env,
+    env: commandEnv(command, opts.env),
     stdio: "inherit",
   });
   return { code: res.status ?? 1, ok: res.status === 0 };
@@ -163,12 +232,10 @@ export function openUrl(url: string): NewWindowResult {
 /** export lines for env vars the new shell needs. The target is a
  *  brand-new Terminal.app/login shell, NOT a fork of this process, so
  *  nothing is inherited automatically — its rc files (~/.zshrc etc.) run
- *  first and can set up a *different* PATH than this process has (e.g.
- *  nvm's default alias instead of whatever `nvm use` picked for the
- *  shell that launched the toolkit). PATH is therefore always exported
- *  explicitly, even when it matches this process's env, so the new shell
- *  resolves the same node/pi/etc. binaries this process already
- *  validated. Other vars only get exported when they differ. */
+ *  first and can set up a *different* PATH than this process has. PATH is
+ *  therefore always exported explicitly, even when it matches this process's env, so the new shell
+ *  resolves the same toolkit-local node/npm/twilio/pi/etc. binaries this
+ *  process already validated. Other vars only get exported when they differ. */
 function envExportLines(env: NodeJS.ProcessEnv): string[] {
   const lines: string[] = [];
   if (env.PATH) lines.push(`export PATH=${q(env.PATH)}`);
@@ -250,8 +317,10 @@ export function openInNewWindow(
   opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
 ): NewWindowResult {
   const cwd = opts.cwd ?? process.cwd();
-  const env = opts.env ?? process.env;
-  const inner = shCmd(command, args);
+  const env = commandEnv(command, opts.env);
+  const resolved = commandForSpawn(command);
+  if (!resolved) return { ok: false, error: `${command} is not installed in this toolkit environment.` };
+  const inner = shCmd(resolved, args);
 
   if (process.platform === "darwin") return openMacTerminal(inner, cwd, env);
   if (process.platform === "win32") return openWindowsTerminal(inner, cwd, env);
@@ -269,9 +338,11 @@ export function startDaemon(
     mkdirSync(dirname(opts.logFile), { recursive: true });
     logFd = openSync(opts.logFile, "w");
   }
-  const child = spawn("/bin/sh", ["-c", shCmd(command, args)], {
+  const resolved = commandForSpawn(command);
+  if (!resolved) throw new Error(`${command} is not installed in this toolkit environment.`);
+  const child = spawn("/bin/sh", ["-c", shCmd(resolved, args)], {
     cwd: opts.cwd,
-    env: opts.env ?? process.env,
+    env: commandEnv(command, opts.env),
     stdio: logFd === undefined ? "ignore" : ["ignore", logFd, logFd],
     detached: true,
   });
@@ -290,8 +361,9 @@ export function startDaemon(
  *  triggered by a menu selection; use haveAsync() for anything on a
  *  polling/background path. */
 export function have(bin: string): boolean {
+  if (TOOLKIT_LOCAL_ONLY_BINS.has(bin)) return Boolean(localCommandPath(bin));
   try {
-    execSync(`command -v ${bin}`, { stdio: "ignore", shell: "/bin/sh" });
+    execSync(`command -v ${bin}`, { stdio: "ignore", shell: "/bin/sh", env: toolkitEnv() });
     return true;
   } catch {
     return false;
@@ -302,10 +374,12 @@ export function have(bin: string): boolean {
  *  NOTE: synchronous — see have() above for why that matters. Use
  *  captureAsync() for anything on a polling/background path. */
 export function capture(command: string, args: string[], env?: NodeJS.ProcessEnv): string {
+  const resolved = commandForSpawn(command);
+  if (!resolved) return "";
   try {
-    const res = spawnSync("/bin/sh", ["-c", shCmd(command, args)], {
+    const res = spawnSync("/bin/sh", ["-c", shCmd(resolved, args)], {
       encoding: "utf8",
-      env: env ?? process.env,
+      env: commandEnv(command, env),
     });
     return (res.stdout ?? "").trim();
   } catch {
@@ -317,8 +391,9 @@ export function capture(command: string, args: string[], env?: NodeJS.ProcessEnv
  *  thread via libuv, so OpenTUI keeps rendering and handling input (and
  *  any in-flight chat fetch keeps streaming) while this is pending. */
 export function haveAsync(bin: string): Promise<boolean> {
+  if (TOOLKIT_LOCAL_ONLY_BINS.has(bin)) return Promise.resolve(Boolean(localCommandPath(bin)));
   return new Promise((resolve) => {
-    const child = spawn("/bin/sh", ["-c", `command -v ${bin}`], { stdio: "ignore" });
+    const child = spawn("/bin/sh", ["-c", `command -v ${bin}`], { stdio: "ignore", env: toolkitEnv() });
     child.on("error", () => resolve(false));
     child.on("close", (code) => resolve(code === 0));
   });
@@ -328,9 +403,11 @@ export function haveAsync(bin: string): Promise<boolean> {
  *  matters — this is the primitive readStatusAsync() uses so status
  *  polling never freezes the TUI. */
 export function captureAsync(command: string, args: string[], env?: NodeJS.ProcessEnv): Promise<string> {
+  const resolved = commandForSpawn(command);
+  if (!resolved) return Promise.resolve("");
   return new Promise((resolve) => {
-    const child = spawn("/bin/sh", ["-c", shCmd(command, args)], {
-      env: env ?? process.env,
+    const child = spawn("/bin/sh", ["-c", shCmd(resolved, args)], {
+      env: commandEnv(command, env),
       stdio: ["ignore", "pipe", "ignore"],
     });
     let out = "";

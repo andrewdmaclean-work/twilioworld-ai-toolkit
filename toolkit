@@ -5,6 +5,18 @@
 #
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_DIR="$ROOT/.toolkit"
+TOOLCHAINS_DIR="$CONFIG_DIR/toolchains"
+BUN_INSTALL="$TOOLCHAINS_DIR/bun"
+BUN_BIN="$BUN_INSTALL/bin/bun"
+NODE_VERSION="${TOOLKIT_NODE_VERSION:-22.19.0}"
+NODE_HOME="$TOOLCHAINS_DIR/node-v22"
+NODE_BIN="$NODE_HOME/bin/node"
+NPM_PREFIX="$CONFIG_DIR/npm-global"
+export BUN_INSTALL
+export npm_config_prefix="$NPM_PREFIX"
+export NPM_CONFIG_PREFIX="$NPM_PREFIX"
+export PATH="$NPM_PREFIX/bin:$BUN_INSTALL/bin:$NODE_HOME/bin:$PATH"
 
 node_ok() {
   command -v node >/dev/null 2>&1 || return 1
@@ -47,8 +59,8 @@ run_doctor() {
   doctor_check "UTF-8 locale" bash -c 'case "${LC_ALL:-${LANG:-}}" in *UTF-8*|*utf8*|*UTF8*) exit 0 ;; *) exit 1 ;; esac' || fail=1
   doctor_check "git on PATH" command -v git || fail=1
   doctor_check "curl on PATH" command -v curl || fail=1
-  doctor_check "bun on PATH" command -v bun || fail=1
-  doctor_check "Node >= 22.19.0" node_ok || fail=1
+  doctor_check "project-local bun" test -x "$BUN_BIN" || fail=1
+  doctor_check "project-local Node >= 22.19.0" node_ok || fail=1
   doctor_check "Twilio skills submodule populated" test -f "$ROOT/vendor/twilio-ai/skills/README.md" || fail=1
   doctor_check "repo writable" test -w "$ROOT" || fail=1
 
@@ -65,6 +77,8 @@ run_doctor() {
 
   doctor_info "llamafile runtime" test -x "$ROOT/tools/llamafile"
   doctor_info "local model file" test -f "$ROOT/models/gemma4-e2b.gguf"
+  doctor_info "toolkit-local Twilio CLI" test -x "$NPM_PREFIX/bin/twilio"
+  printf 'INFO toolkit Twilio CLI home: %s\n' "$CONFIG_DIR/twilio-cli-home"
 
   echo
   if [[ "$fail" -eq 0 ]]; then
@@ -99,96 +113,70 @@ if [[ "${TOOLKIT_TUI_SMOKE:-}" != "1" && "${EUID:-$(id -u)}" -eq 0 ]]; then
   exit 2
 fi
 
-if ! command -v bun >/dev/null 2>&1; then
-  echo "Installing bun (needed for the TUI)..."
-  if command -v brew >/dev/null 2>&1; then
-    brew install bun || { echo "brew install bun failed. Install manually: https://bun.sh"; exit 1; }
-  else
-    curl -fsSL https://bun.sh/install | bash || { echo "bun install failed. Install manually: https://bun.sh"; exit 1; }
-    # The installer writes to ~/.bashrc but doesn't update this shell's PATH.
-    # Export it explicitly so subsequent commands in this script can find bun.
-    export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
-    export PATH="$BUN_INSTALL/bin:$PATH"
-  fi
+platform_arch() {
+  local os arch
+  os="$(uname -s)"
+  arch="$(uname -m)"
+  case "$os:$arch" in
+    Darwin:arm64|Darwin:aarch64) echo "bun-darwin-aarch64 darwin-arm64" ;;
+    Darwin:x86_64|Darwin:amd64)  echo "bun-darwin-x64 darwin-x64" ;;
+    Linux:arm64|Linux:aarch64)   echo "bun-linux-aarch64 linux-arm64" ;;
+    Linux:x86_64|Linux:amd64)    echo "bun-linux-x64 linux-x64" ;;
+    *) echo "unsupported unsupported" ;;
+  esac
+}
+
+ensure_project_bun() {
+  [[ -x "$BUN_BIN" ]] && return 0
+  command -v curl >/dev/null 2>&1 || { echo "curl is required to install project-local Bun." >&2; return 1; }
+  command -v unzip >/dev/null 2>&1 || { echo "unzip is required to install project-local Bun." >&2; return 1; }
+
+  local bun_target node_target tmp zip
+  read -r bun_target node_target < <(platform_arch)
+  [[ "$bun_target" != "unsupported" ]] || { echo "Unsupported platform for Bun: $(uname -s) $(uname -m)" >&2; return 1; }
+
+  echo "Installing project-local Bun into $BUN_INSTALL..."
+  tmp="$(mktemp -d "${TMPDIR:-/tmp}/twilioworld-bun.XXXXXX")"
+  zip="$tmp/bun.zip"
+  curl -fsSL "https://github.com/oven-sh/bun/releases/latest/download/${bun_target}.zip" -o "$zip" \
+    || { echo "Bun download failed." >&2; rm -rf "$tmp"; return 1; }
+  unzip -q "$zip" -d "$tmp" \
+    || { echo "Bun extraction failed." >&2; rm -rf "$tmp"; return 1; }
+  mkdir -p "$BUN_INSTALL/bin"
+  mv "$tmp/$bun_target/bun" "$BUN_BIN" \
+    || { echo "Could not install Bun into $BUN_BIN." >&2; rm -rf "$tmp"; return 1; }
+  chmod +x "$BUN_BIN"
+  rm -rf "$tmp"
+}
+
+ensure_project_node() {
+  [[ -x "$NODE_BIN" ]] && node_ok && return 0
+  command -v curl >/dev/null 2>&1 || { echo "curl is required to install project-local Node." >&2; return 1; }
+  command -v tar >/dev/null 2>&1 || { echo "tar is required to install project-local Node." >&2; return 1; }
+
+  local bun_target node_target tmp archive
+  read -r bun_target node_target < <(platform_arch)
+  [[ "$node_target" != "unsupported" ]] || { echo "Unsupported platform for Node: $(uname -s) $(uname -m)" >&2; return 1; }
+
+  echo "Installing project-local Node $NODE_VERSION into $NODE_HOME..."
+  tmp="$(mktemp -d "${TMPDIR:-/tmp}/twilioworld-node.XXXXXX")"
+  archive="$tmp/node.tar.xz"
+  curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-${node_target}.tar.xz" -o "$archive" \
+    || { echo "Node download failed." >&2; rm -rf "$tmp"; return 1; }
+  rm -rf "$NODE_HOME"
+  mkdir -p "$NODE_HOME"
+  tar -xJf "$archive" -C "$NODE_HOME" --strip-components=1 \
+    || { echo "Node extraction failed." >&2; rm -rf "$tmp"; return 1; }
+  rm -rf "$tmp"
+  node_ok || { echo "Project-local Node is not new enough: $("$NODE_BIN" --version 2>/dev/null || echo not found)" >&2; return 1; }
+}
+
+ensure_project_bun || exit 1
+if [[ "${TOOLKIT_TUI_SMOKE:-}" != "1" ]]; then
+  ensure_project_node || exit 2
 fi
 
 cd "$ROOT/tui"
-[[ -d node_modules ]] || bun install
+[[ -d node_modules ]] || "$BUN_BIN" install
 
-# ── Node >= 22.19.0 requirement ──────────────────────────────────────────
-# The TUI (and Pi) need a modern Node on PATH. bun above is only the TUI
-# runtime; several agent/tooling paths still shell out to `node`/`npm`.
-# If Node is missing or too old we offer to install it via nvm (no sudo,
-# no system-wide change — it lives in ~/.nvm and is the most portable
-# option across macOS/Linux). We prompt first because installing nvm
-# writes to the user's shell rc files.
-# Load nvm into THIS shell if it's already installed but not sourced
-# (non-interactive shells don't run the rc lines that define `nvm`).
-load_nvm() {
-  export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
-  # shellcheck disable=SC1091
-  [[ -s "$NVM_DIR/nvm.sh" ]] && . "$NVM_DIR/nvm.sh" >/dev/null 2>&1
-  command -v nvm >/dev/null 2>&1
-}
-
-install_node_via_nvm() {
-  echo "Installing nvm + Node 22 (this writes to ~/.nvm and your shell profile)..." >&2
-  if ! load_nvm; then
-    # A stale/exported NVM_DIR that points at a missing directory makes the
-    # official installer bail ("that directory does not exist"). Normalize it
-    # first: pick a real target and make sure it exists before installing.
-    export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
-    mkdir -p "$NVM_DIR" || { echo "Could not create $NVM_DIR. Install Node 22 manually: https://nodejs.org" >&2; return 1; }
-    curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash \
-      || { echo "nvm install failed. Install Node 22 manually: https://nodejs.org" >&2; return 1; }
-    load_nvm || { echo "nvm installed but could not be loaded into this shell. Open a new terminal and re-run ./toolkit." >&2; return 1; }
-  fi
-  nvm install 22 || { echo "nvm install 22 failed." >&2; return 1; }
-  nvm use 22 >/dev/null 2>&1 || return 1
-  node_ok
-}
-
-ask_install_node() {
-  local reply
-  if [[ "${TOOLKIT_AUTO_INSTALL_NODE:-}" == "1" ]]; then
-    return 0
-  fi
-
-  while true; do
-    if [[ -r /dev/tty && -w /dev/tty ]]; then
-      printf "Install Node 22 now via nvm? [y/n] " >/dev/tty
-      read -r reply </dev/tty
-    elif [[ -t 0 ]]; then
-      printf "Install Node 22 now via nvm? [y/n] " >&2
-      read -r reply
-    else
-      echo "Cannot prompt for Node install because stdin is not interactive." >&2
-      echo "Re-run in a terminal, or run: TOOLKIT_AUTO_INSTALL_NODE=1 ./toolkit" >&2
-      return 1
-    fi
-
-    case "$reply" in
-      [Yy]) return 0 ;;
-      [Nn]) return 1 ;;
-      *) echo "Please type y or n." >&2 ;;
-    esac
-  done
-}
-
-if [[ "${TOOLKIT_TUI_SMOKE:-}" != "1" ]] && ! node_ok; then
-  # Maybe nvm already has a good Node, just not loaded into this shell.
-  if load_nvm && nvm use 22 >/dev/null 2>&1 && node_ok; then
-    :  # good — nvm's Node 22 is now active for this run
-  else
-    current="$(command -v node >/dev/null 2>&1 && node --version || echo 'not found')"
-    echo "TwilioWorld Agentic Coding Toolkit requires Node >= 22.19.0 on PATH (current: ${current})." >&2
-    if ask_install_node && install_node_via_nvm; then
-      echo "Node $(node --version) is now active for this session." >&2
-    else
-      echo "Skipping auto-install. Install Node 22 and re-run:  nvm install 22 && nvm use 22" >&2
-      exit 2
-    fi
-  fi
-fi
-
-exec bun run src/index.ts "$@"
+exec "$BUN_BIN" run src/index.ts "$@"
