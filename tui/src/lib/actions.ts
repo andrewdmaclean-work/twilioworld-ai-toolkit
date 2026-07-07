@@ -3,26 +3,10 @@
 // of runSetup() but can be triggered on its own from a submenu, so the
 // user never has to visit a monolithic "Setup" screen.
 
-import { chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readSync, renameSync, rmSync, statSync } from "fs";
 import { join } from "path";
 import { capture, have, killModelServer, openInNewWindow, runStreaming, type LogFn, type NewWindowResult } from "./exec.ts";
-import { twilioFactAt } from "./twilio-facts.ts";
-import {
-  GGUF_DEST,
-  GGUF_MIN_BYTES,
-  GGUF_MMPROJ,
-  GGUF_STAGING,
-  GGUF_URL,
-  LOCAL_MODEL_SIZE_BYTES,
-  LOCAL_MODEL_SIZE_LABEL,
-  LLAMAFILE_DEST,
-  LLAMAFILE_SIZE_BYTES,
-  LLAMAFILE_SIZE_LABEL,
-  LLAMAFILE_URL,
-  MODELS_DIR,
-  ROOT,
-  TOOLS_DIR,
-} from "./constants.ts";
+import { installLocalModel } from "./model-install.ts";
+import { ROOT } from "./constants.ts";
 
 function ok(msg: string, onLog: LogFn) { onLog(`✓ ${msg}`, "stdout"); }
 function warn(msg: string, onLog: LogFn) { onLog(`⚠  ${msg}`, "stderr"); }
@@ -30,159 +14,11 @@ function err(msg: string, onLog: LogFn) { onLog(`✗ ${msg}`, "stderr"); }
 function say(msg: string, onLog: LogFn) { onLog(msg, "stdout"); }
 function step(msg: string, onLog: LogFn) { onLog(`\n▶ ${msg}`, "stdout"); }
 
-function curlDownloadArgs(url: string, dest: string): string[] {
-  // --no-progress-meter suppresses curl's \r-based progress bar, which the
-  // in-app log pane can't display (it never flushes until the download ends).
-  // We log our own size-based progress via a setInterval in downloadLocalModel.
-  return ["-fL", "--max-redirs", "5", "-C", "-", "--no-progress-meter", url, "-o", dest];
-}
-
-function sizeLabel(bytes: number): string {
-  if (bytes < 1_048_576) return `${(bytes / 1024).toFixed(0)} KB`;
-  if (bytes < 1_073_741_824) return `${(bytes / 1_048_576).toFixed(1)} MB`;
-  return `${(bytes / 1_073_741_824).toFixed(2)} GB`;
-}
-
-/** Poll dest file size every intervalMs and log "X / total" progress lines. */
-function startProgressLogger(
-  dest: string,
-  totalBytes: number,
-  intervalMs: number,
-  onLog: LogFn,
-  opts: { facts?: boolean } = {},
-): ReturnType<typeof setInterval> {
-  let tick = 0;
-  if (opts.facts) onLog(`   Twilio AI tip: ${twilioFactAt(tick++)}`, "stdout");
-  return setInterval(() => {
-    try {
-      const downloaded = existsSync(dest) ? statSync(dest).size : 0;
-      const pct = totalBytes > 0 ? Math.min(100, Math.round((downloaded / totalBytes) * 100)) : 0;
-      onLog(`   downloading… ${sizeLabel(downloaded)} / ${sizeLabel(totalBytes)}  (${pct}%)`, "stdout");
-      if (opts.facts && tick % 5 === 0) onLog(`   Twilio AI tip: ${twilioFactAt(tick / 5)}`, "stdout");
-      tick++;
-    } catch { /* file not yet visible — ignore */ }
-  }, intervalMs);
-}
-
-function elapsedLabel(startedAt: number): string {
-  const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const rest = seconds % 60;
-  return `${minutes}m ${rest}s`;
-}
-
-function startExtractionLogger(onLog: LogFn): ReturnType<typeof setInterval> {
-  const startedAt = Date.now();
-  let tick = 0;
-  return setInterval(() => {
-    onLog(`   extracting… still working (${elapsedLabel(startedAt)} elapsed)`, "stdout");
-    if (tick % 3 === 0) onLog(`   Twilio AI tip: ${twilioFactAt(tick / 3)}`, "stdout");
-    tick++;
-  }, 5000);
-}
-
-function looksLikeExecutable(path: string): boolean {
-  try {
-    const fd = openSync(path, "r");
-    try {
-      const buf = Buffer.alloc(4);
-      const n = readSync(fd, buf, 0, 4, 0);
-      if (n < 2) return false;
-      if (buf[0] === 0x4d && buf[1] === 0x5a) return true; // MZ (APE)
-      if (buf.equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46]))) return true; // ELF
-      const magic = buf.readUInt32BE(0);
-      return [0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe, 0xcafebabe].includes(magic);
-    } finally { closeSync(fd); }
-  } catch { return false; }
-}
-
-function ggufSizeOk(): boolean {
-  if (!existsSync(GGUF_DEST)) return false;
-  try { return statSync(GGUF_DEST).size >= GGUF_MIN_BYTES; } catch { return false; }
-}
-function runtimeOk(): boolean { return existsSync(LLAMAFILE_DEST); }
-function freeKb(): number {
-  try {
-    const out = capture("df", ["-k", MODELS_DIR.replace(/\/models$/, "") || ROOT]);
-    const match = out.split("\n").find((l) => !l.startsWith("Filesystem"));
-    if (!match) return Infinity;
-    return parseInt(match.trim().split(/\s+/)[3] ?? "0", 10);
-  } catch { return Infinity; }
-}
-function findGgufs(dir: string): string[] {
-  const found: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) found.push(...findGgufs(full));
-    else if (entry.isFile() && entry.name.endsWith(".gguf")) found.push(full);
-  }
-  return found;
-}
-
 /** Download the local Gemma model + llamafile runtime. Chat's only dependency. */
 export async function downloadLocalModel(opts: { onLog: LogFn; onDone: (ok: boolean) => void }): Promise<void> {
   const { onLog, onDone } = opts;
-
-  step("Local AI model — Gemma 4 E2B via llamafile", onLog);
-  if (runtimeOk() && ggufSizeOk()) {
-    ok("Local model already present", onLog);
-    onDone(true);
-    return;
-  }
-  if (freeKb() < 5_242_880) {
-    err("Need ~5GB free disk. Free up space then try again.", onLog);
-    onDone(false);
-    return;
-  }
-
-  // Runtime
-  if (!runtimeOk()) {
-    say(`   Downloading llamafile runtime (~${LLAMAFILE_SIZE_LABEL})…`, onLog);
-    mkdirSync(TOOLS_DIR, { recursive: true });
-    const runtimeProgress = startProgressLogger(LLAMAFILE_DEST, LLAMAFILE_SIZE_BYTES, 3000, onLog);
-    const res = await runStreaming("curl", curlDownloadArgs(LLAMAFILE_URL, LLAMAFILE_DEST), { cwd: ROOT, onLog });
-    clearInterval(runtimeProgress);
-    if (res.ok && !looksLikeExecutable(LLAMAFILE_DEST)) {
-      err("Downloaded runtime isn't a valid binary — removing it.", onLog);
-      rmSync(LLAMAFILE_DEST, { force: true });
-      onDone(false); return;
-    } else if (res.ok) {
-      chmodSync(LLAMAFILE_DEST, 0o755);
-      ok("llamafile runtime ready", onLog);
-    } else { err("Runtime download failed", onLog); onDone(false); return; }
-  }
-
-  // Weights
-  if (!ggufSizeOk()) {
-    if (existsSync(GGUF_DEST)) rmSync(GGUF_DEST);
-    mkdirSync(MODELS_DIR, { recursive: true });
-    if (!existsSync(GGUF_STAGING)) {
-      say(`   Downloading Gemma 4 E2B (~${LOCAL_MODEL_SIZE_LABEL}) — this will take a few minutes…`, onLog);
-      const weightsProgress = startProgressLogger(GGUF_STAGING, LOCAL_MODEL_SIZE_BYTES, 3000, onLog, { facts: true });
-      const res = await runStreaming("curl", curlDownloadArgs(GGUF_URL, GGUF_STAGING), { cwd: ROOT, onLog });
-      clearInterval(weightsProgress);
-      if (!res.ok) { err("Download failed — partial file kept for resume. Try again.", onLog); onDone(false); return; }
-    }
-    say("   Extracting… this can take a few minutes on a Pi-class machine.", onLog);
-    const extractTmp = mkdtempSync(join(MODELS_DIR, "extract-"));
-    const extractProgress = startExtractionLogger(onLog);
-    const tarRes = await runStreaming("tar", ["-xf", GGUF_STAGING, "-C", extractTmp], { cwd: ROOT, onLog });
-    clearInterval(extractProgress);
-    if (!tarRes.ok) { err("Extraction failed", onLog); onDone(false); return; }
-    const all = findGgufs(extractTmp);
-    const mmproj = all.find((f) => f.includes("mmproj"));
-    const main = all.filter((f) => !f.includes("mmproj")).sort((a, b) => statSync(b).size - statSync(a).size)[0];
-    if (main) {
-      renameSync(main, GGUF_DEST);
-      if (mmproj) renameSync(mmproj, GGUF_MMPROJ);
-      rmSync(extractTmp, { recursive: true, force: true });
-      ok(`Model ready (${(statSync(GGUF_DEST).size / 1_073_741_824).toFixed(1)}GB)`, onLog);
-    } else { err("No model GGUF found in archive.", onLog); onDone(false); return; }
-  }
-
-  ok("Local model ready — Chat with Twilio Docs is available.", onLog);
-  onDone(true);
+  const ok = await installLocalModel({ onLog, heading: "Local AI model — Gemma 4 E2B via llamafile" });
+  onDone(ok);
 }
 
 /** Install the Twilio CLI globally via npm. */

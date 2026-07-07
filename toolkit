@@ -63,8 +63,8 @@ run_doctor() {
     fi
   fi
 
-  doctor_info "llamafile runtime" test -x "$ROOT/bin/llamafile"
-  doctor_info "local model file" test -f "$ROOT/models/gemma-3-4b-it-QAT-Q4_0.gguf"
+  doctor_info "llamafile runtime" test -x "$ROOT/tools/llamafile"
+  doctor_info "local model file" test -f "$ROOT/models/gemma4-e2b.gguf"
 
   echo
   if [[ "$fail" -eq 0 ]]; then

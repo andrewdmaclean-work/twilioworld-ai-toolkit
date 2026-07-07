@@ -156,6 +156,14 @@ export const CHAT_TOOLS = [
   },
 ] as const;
 
+interface SkillIndexEntry {
+  path: string;
+  text: string;
+  haystack: string;
+}
+
+let skillIndex: SkillIndexEntry[] | null = null;
+
 function listSkillFiles(dir = SKILLS_DIR, limit = Number.POSITIVE_INFINITY): string[] {
   const out: string[] = [];
   function walk(current: string): void {
@@ -172,6 +180,16 @@ function listSkillFiles(dir = SKILLS_DIR, limit = Number.POSITIVE_INFINITY): str
   }
   walk(dir);
   return out;
+}
+
+function getSkillIndex(): SkillIndexEntry[] {
+  if (skillIndex) return skillIndex;
+  skillIndex = listSkillFiles().map((path) => {
+    const full = join(SKILLS_DIR, path);
+    const text = readFileSync(full, "utf8");
+    return { path, text, haystack: `${path}\n${text}`.toLowerCase() };
+  });
+  return skillIndex;
 }
 
 function safeSkillPath(path: string): string | null {
@@ -195,17 +213,14 @@ function searchSkills(query: string, limit = 8): Array<{ path: string; score: nu
   const terms = query.toLowerCase().split(/\W+/).filter((term) => term.length > 2 && !stop.has(term));
   const activeTerms = terms.length ? terms : query.toLowerCase().split(/\W+/).filter(Boolean);
   const matches: Array<{ path: string; score: number; excerpt: string }> = [];
-  for (const path of listSkillFiles()) {
-    const full = join(SKILLS_DIR, path);
-    const text = readFileSync(full, "utf8");
-    const haystack = `${path}\n${text}`.toLowerCase();
+  for (const entry of getSkillIndex()) {
     let score = 0;
     for (const term of activeTerms) {
-      if (path.toLowerCase().includes(term)) score += 4;
-      if (haystack.includes(term)) score += 1;
+      if (entry.path.toLowerCase().includes(term)) score += 4;
+      if (entry.haystack.includes(term)) score += 1;
     }
     if (score > 0) {
-      matches.push({ path, score, excerpt: skillExcerpt(text, activeTerms[0] ?? query) });
+      matches.push({ path: entry.path, score, excerpt: skillExcerpt(entry.text, activeTerms[0] ?? query) });
     }
   }
   return matches.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path)).slice(0, limit);

@@ -2,7 +2,7 @@
 // Builds the arg arrays for llamafile. Spawning is done by the caller
 // (startDaemon for the local OpenAI-compatible server).
 
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { capture } from "./exec.ts";
 import { modelReasoningMode, type ModelReasoningMode } from "./config.ts";
 import { writeWebUiConfig } from "./webui-config.ts";
@@ -11,6 +11,7 @@ import {
   GGUF_MIN_BYTES,
   GGUF_MMPROJ,
   LLAMAFILE_DEST,
+  MODEL_SERVER_BASE_URL,
   MODEL_SERVER_LOG,
   MODEL_SERVER_PORT,
   MODEL_SERVER_URL,
@@ -35,7 +36,7 @@ function validReasoning(raw: string | undefined): ModelReasoningMode | null {
   return raw === "on" || raw === "auto" ? raw : "off";
 }
 
-const CTX_SIZE = validDigits(process.env.CTX_SIZE, "32768");
+export const MODEL_CTX_SIZE = validDigits(process.env.CTX_SIZE, "32768");
 export const MODEL_REASONING = process.env.MODEL_REASONING
   ? validReasoning(process.env.MODEL_REASONING) ?? "off"
   : modelReasoningMode();
@@ -62,10 +63,44 @@ export function modelRunning(): boolean {
 
 export { MODEL_SERVER_LOG };
 
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function modelStartupStatus(): string {
+  if (!existsSync(MODEL_SERVER_LOG)) return "starting process";
+  try {
+    const lines = readFileSync(MODEL_SERVER_LOG, "utf8").split(/\r?\n/).slice(-120);
+    const text = lines.join("\n");
+    if (/Segmentation fault/.test(text)) return "crashed: segmentation fault";
+    if (/failed to initialize|failed to create llama_context|error while trying/.test(text)) return "failed during model initialization";
+    if (/server is listening/.test(text)) return "server listening";
+    if (/warming up the model/.test(text)) return "warming up model";
+    if (/loading model/.test(text)) return "loading model weights";
+    if (/binding port/.test(text)) return `binding port ${MODEL_SERVER_PORT}`;
+    return "starting process";
+  } catch {
+    return "reading startup log";
+  }
+}
+
+export async function waitForModelServer(opts: {
+  timeoutSeconds?: number;
+  onTick?: (elapsedSeconds: number, status: string) => void;
+} = {}): Promise<boolean> {
+  const timeoutSeconds = opts.timeoutSeconds ?? 90;
+  for (let i = 0; i < timeoutSeconds; i++) {
+    if (modelRunning()) return true;
+    opts.onTick?.(i + 1, modelStartupStatus());
+    await sleep(1000);
+  }
+  return modelRunning();
+}
+
 function baseModelArgs(): string[] {
   const args = [
     "-m", GGUF_DEST,
-    "--ctx-size", CTX_SIZE,
+    "--ctx-size", MODEL_CTX_SIZE,
     "--parallel", "1",
     "--flash-attn", "on",
     "--cache-type-k", "q4_0",
@@ -77,6 +112,10 @@ function baseModelArgs(): string[] {
   ];
   if (existsSync(GGUF_MMPROJ)) args.push("--mmproj", GGUF_MMPROJ);
   return args;
+}
+
+export function modelEndpointLabel(): string {
+  return `${MODEL_SERVER_BASE_URL}/v1`;
 }
 
 /** Args for `llamafile --server` (background daemon). */

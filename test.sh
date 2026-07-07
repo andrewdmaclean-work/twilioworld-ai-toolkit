@@ -81,23 +81,27 @@ check "constants has llamafile URL"   grep -q 'llamafile' tui/src/lib/constants.
 check "constants has whisperfile URL" grep -q 'WHISPERFILE_URL' tui/src/lib/constants.ts
 check "constants has GGUF URL"        grep -q 'kaggle' tui/src/lib/constants.ts
 check "setup checks prerequisites"   grep -q 'node.*git.*curl' tui/src/lib/setup.ts
-check "setup handles model download"  grep -q 'GGUF_STAGING' tui/src/lib/setup.ts
+check "setup handles model download"  bash -c 'grep -q "installLocalModel" tui/src/lib/setup.ts && grep -q "GGUF_STAGING" tui/src/lib/model-install.ts'
+check "model installer is shared" bash -c '
+  grep -q "export async function installLocalModel" tui/src/lib/model-install.ts &&
+  grep -q "installLocalModel" tui/src/lib/setup.ts &&
+  grep -q "installLocalModel" tui/src/lib/actions.ts &&
+  grep -q "if (!modelOk) { onDone(false); return; }" tui/src/lib/setup.ts &&
+  ! grep -q "function curlDownloadArgs" tui/src/lib/setup.ts &&
+  ! grep -q "function curlDownloadArgs" tui/src/lib/actions.ts
+'
 check "model extraction has heartbeat" bash -c '
-  grep -q "startExtractionLogger" tui/src/lib/actions.ts &&
-  grep -q "startExtractionLogger" tui/src/lib/setup.ts &&
-  grep -q "still working" tui/src/lib/actions.ts &&
-  grep -q "still working" tui/src/lib/setup.ts
+  grep -q "startExtractionLogger" tui/src/lib/model-install.ts &&
+  grep -q "still working" tui/src/lib/model-install.ts
 '
 check "model wait shows Twilio AI tips" bash -c '
   grep -q "TWILIO_AI_FACTS" tui/src/lib/twilio-facts.ts &&
-  grep -q "Twilio AI tip" tui/src/lib/actions.ts &&
-  grep -q "Twilio AI tip" tui/src/lib/setup.ts &&
-  grep -q "facts: true" tui/src/lib/actions.ts &&
-  grep -q "facts: true" tui/src/lib/setup.ts
+  grep -q "Twilio AI tip" tui/src/lib/model-install.ts &&
+  grep -q "facts: true" tui/src/lib/model-install.ts
 '
 check "setup has blast-radius warning" grep -q 'spend limit' tui/src/lib/setup.ts
 check "setup never prints secret to log" bash -c '! grep -q "SHOWN ONCE" tui/src/lib/setup.ts'
-check "setup has GGUF size check"     grep -q 'GGUF_MIN_BYTES' tui/src/lib/setup.ts
+check "setup has GGUF size check"     grep -q 'GGUF_MIN_BYTES' tui/src/lib/model-install.ts
 check "setup handles Windows path"    grep -q 'llamafile.exe\|win32' tui/src/lib/constants.ts
 check "configure-agent pins pi package" grep -q 'PI_AGENT_PKG' tui/src/lib/configure-agent.ts
 check "configure-agent has Pi MCP adapter" grep -q 'pi-mcp-adapter' tui/src/lib/pi.ts
@@ -113,13 +117,16 @@ check "pi-mcp has execute mcp guard"  grep -q 'TWILIO_MCP_CREDS' tui/src/lib/pi-
 check "model.ts has server args"      grep -q 'serverArgs\|--server' tui/src/lib/model.ts
 check "model startup is observable" bash -c '
   grep -q "MODEL_SERVER_LOG" tui/src/lib/model.ts &&
+  grep -q "modelStartupStatus" tui/src/lib/model.ts &&
+  grep -q "waitForModelServer" tui/src/lib/model.ts &&
   grep -q "logFile" tui/src/lib/exec.ts &&
   grep -q "logFile: MODEL_SERVER_LOG" tui/src/screens/chat.ts &&
   grep -q "logFile: MODEL_SERVER_LOG" tui/src/index.ts &&
   grep -q "logFile: MODEL_SERVER_LOG" tui/src/lib/pi.ts
 '
 check "model readiness waits for slow startup" bash -c '
-  grep -q "i < 90" tui/src/screens/chat.ts &&
+  grep -q "timeoutSeconds: 90" tui/src/screens/chat.ts &&
+  grep -q "timeoutSeconds: 90" tui/src/lib/pi.ts &&
   grep -q "90s" tui/src/screens/chat.ts &&
   grep -q "elapsed" tui/src/screens/chat.ts &&
   grep -q "\-\-max-time" tui/src/lib/model.ts
@@ -150,13 +157,12 @@ check "model port is configurable end-to-end" bash -c '
 '
 check "local model size copy is current" bash -c '
   grep -q "LOCAL_MODEL_SIZE_LABEL = \"3.3GB\"" tui/src/lib/constants.ts &&
-  grep -q "LOCAL_MODEL_SIZE_BYTES" tui/src/lib/actions.ts &&
+  grep -q "LOCAL_MODEL_SIZE_BYTES" tui/src/lib/model-install.ts &&
   ! grep -RIn "2\\.5GB\\|2\\.5 GB\\|~2\\.5" README.md tui/src demo 2>/dev/null
 '
 check "llamafile runtime size copy is current" bash -c '
   grep -q "LLAMAFILE_SIZE_LABEL = \"302MB\"" tui/src/lib/constants.ts &&
-  grep -q "LLAMAFILE_SIZE_BYTES" tui/src/lib/actions.ts &&
-  grep -q "LLAMAFILE_SIZE_BYTES" tui/src/lib/setup.ts &&
+  grep -q "LLAMAFILE_SIZE_BYTES" tui/src/lib/model-install.ts &&
   ! grep -RIn "100MB\\|100_000_000" README.md tui/src demo 2>/dev/null
 '
 check "voice module uses whisperfile" bash -c 'grep -q "transcribeVoiceFile" tui/src/lib/voice.ts && grep -q "WHISPERFILE_DEST" tui/src/lib/voice.ts'
@@ -189,10 +195,23 @@ check "onboarding checklist reflects completed steps" bash -c '
 check "chat stays inside OpenTUI"     bash -c 'grep -q "buildChatScreen" tui/src/index.ts && ! grep -RIn "combinedArgs\\|chatArgs\\|--chat" tui/src 2>/dev/null'
 check "chat enter sends message"      bash -c 'grep -q "InputRenderableEvents.ENTER" tui/src/screens/chat.ts && ! grep -q "input.onSubmit" tui/src/screens/chat.ts'
 check "chat supports tool calls"      bash -c 'grep -q "CHAT_TOOLS" tui/src/screens/chat.ts && grep -q "tool_choice" tui/src/screens/chat.ts && grep -q "runChatTool" tui/src/screens/chat.ts'
+check "chat streams model responses" bash -c '
+  grep -q "streamChatCompletion" tui/src/screens/chat.ts &&
+  grep -q "stream: true" tui/src/screens/chat.ts &&
+  grep -q "getReader" tui/src/screens/chat.ts &&
+  grep -q "Prompt processing locally" tui/src/screens/chat.ts &&
+  grep -q "first text in" tui/src/screens/chat.ts &&
+  ! grep -q "stream: false" tui/src/screens/chat.ts
+'
 check "chat disables markdown replies" bash -c 'grep -q "plainTextChatResponse" tui/src/screens/chat.ts && grep -q "plain text only" tui/src/screens/chat.ts && grep -q "Do not use Markdown" tui/src/screens/chat.ts'
 check "chat hides unfinished voice shortcut" bash -c 'grep -q "isVoiceShortcut" tui/src/screens/chat.ts && grep -q "key.ctrl" tui/src/screens/chat.ts && ! grep -q "Ctrl+R voice input is wired" tui/src/screens/chat.ts'
 check "chat transcript scroll is wired" bash -c 'grep -q "isTranscriptScrollKey" tui/src/screens/chat.ts && grep -q "transcript.handleKeyPress" tui/src/screens/chat.ts && grep -q "pageup" tui/src/screens/chat.ts'
 check "chat can read skills"         bash -c 'grep -q "search_twilio_skills" tui/src/lib/chat-tools.ts && grep -q "read_twilio_skill" tui/src/lib/chat-tools.ts'
+check "chat skill search is cached" bash -c '
+  grep -q "skillIndex" tui/src/lib/chat-tools.ts &&
+  grep -q "getSkillIndex" tui/src/lib/chat-tools.ts &&
+  grep -q "haystack" tui/src/lib/chat-tools.ts
+'
 check "chat can use docs MCP"        bash -c 'grep -q "search_twilio_docs_mcp" tui/src/lib/chat-tools.ts && grep -q "twilio__search" tui/src/lib/chat-tools.ts && grep -q "twilio__retrieve" tui/src/lib/chat-tools.ts'
 check "index.ts has all menu items"   bash -c '
   grep -q '"'"'chat'"'"' tui/src/index.ts &&
@@ -259,6 +278,11 @@ check "OpenCode no longer print-only (launches like the rest)" bash -c '
   ! grep -q "rather than.*opening a new window" tui/src/lib/configure-agent.ts
 '
 check "index uses openInNewWindow"    bash -c 'grep -q "openInNewWindow" tui/src/lib/actions.ts && grep -q "openInNewWindow" tui/src/lib/pi.ts'
+check "status refreshes immediately after actions" bash -c '
+  grep -q "function refreshStatus" tui/src/index.ts &&
+  grep -q "onDone(ok)" tui/src/index.ts &&
+  grep -q "void poll();" tui/src/index.ts
+'
 check "no suspend/resume left in index" bash -c '! grep -q "renderer.suspend\|renderer.resume" tui/src/index.ts'
 check "exec.ts has new-window opener" grep -q 'export function openInNewWindow' tui/src/lib/exec.ts
 check "URL opener works in GUI containers" bash -c '
@@ -317,16 +341,31 @@ echo "── Security audit fixes ──"
 check "E-11 context window raised (model.ts)"      grep -q '"32768"' tui/src/lib/model.ts
 check "E-11 context window raised (pi models.json)" bash -c 'command -v jq && jq -e ".providers.llamafile.models[0].contextWindow == 32768" .pi/models.json || python3 -c "import json; d=json.load(open(\".pi/models.json\")); assert d[\"providers\"][\"llamafile\"][\"models\"][0][\"contextWindow\"] == 32768"'
 check "E-11 context window raised (opencode.json)"  bash -c 'command -v jq && jq -e ".provider.llamafile.models[\"gemma4-e2b\"].limit.context == 32768" opencode.json || python3 -c "import json; d=json.load(open(\"opencode.json\")); assert d[\"provider\"][\"llamafile\"][\"models\"][\"gemma4-e2b\"][\"limit\"][\"context\"] == 32768"'
-check "E-2/M-3 curl downloads resume + bound redirects" bash -c 'grep -q "curlDownloadArgs" tui/src/lib/setup.ts && grep -q "\-\-max-redirs" tui/src/lib/setup.ts && grep -q "\"-C\", \"-\"" tui/src/lib/setup.ts'
+check "E-2/M-3 curl downloads resume + bound redirects" bash -c 'grep -q "curlDownloadArgs" tui/src/lib/model-install.ts && grep -q "\-\-max-redirs" tui/src/lib/model-install.ts && grep -q "\"-C\", \"-\"" tui/src/lib/model-install.ts'
 check "curl progress is rendered by toolkit" bash -c '
-  grep -q "\-\-no-progress-meter" tui/src/lib/actions.ts &&
-  grep -q "\-\-no-progress-meter" tui/src/lib/setup.ts
+  grep -q "\-\-no-progress-meter" tui/src/lib/model-install.ts
+'
+check "model server stop uses PID file" bash -c '
+  grep -q "MODEL_SERVER_PID" tui/src/lib/constants.ts &&
+  grep -q "pidFile" tui/src/lib/exec.ts &&
+  grep -q "killPidFile" tui/src/lib/exec.ts &&
+  grep -q "killPidFile(MODEL_SERVER_PID)" tui/src/lib/exec.ts &&
+  grep -q "pidFile: MODEL_SERVER_PID" tui/src/screens/chat.ts &&
+  grep -q "pidFile: MODEL_SERVER_PID" tui/src/lib/pi.ts &&
+  grep -q "pidFile: MODEL_SERVER_PID" tui/src/index.ts &&
+  ! grep -q "pkill.*llamafile" tui/src/lib/exec.ts
+'
+check "toolkit doctor uses current model paths" bash -c '
+  grep -q "tools/llamafile" toolkit &&
+  grep -q "models/gemma4-e2b.gguf" toolkit &&
+  ! grep -q "bin/llamafile" toolkit &&
+  ! grep -q "gemma-3-4b" toolkit
 '
 check "E-8/H-4 root guard in index.ts" grep -q 'assertNotRoot' tui/src/index.ts
 check "E-8/H-4 root guard in toolkit entry" bash -c 'grep -q "EUID" toolkit && grep -q "should not be run as root" toolkit'
-check "C-1/H-3 magic-byte check before chmod +x" grep -q 'looksLikeExecutable' tui/src/lib/setup.ts
+check "C-1/H-3 magic-byte check before chmod +x" grep -q 'looksLikeExecutable' tui/src/lib/model-install.ts
 check "C-2/H-1/H-2 creds written chmod 600, not printed" bash -c 'grep -q "writeMcpCredsFile" tui/src/lib/setup.ts && grep -q "0o600" tui/src/lib/setup.ts && ! grep -q "TWILIO_MCP_CREDS=\${mcpCreds}" tui/src/lib/setup.ts'
-check "C-3 extraction uses mkdtemp, not predictable path" bash -c 'grep -q "mkdtempSync" tui/src/lib/setup.ts && ! grep -q "extract_tmp" tui/src/lib/setup.ts'
+check "C-3 extraction uses mkdtemp, not predictable path" bash -c 'grep -q "mkdtempSync" tui/src/lib/model-install.ts && ! grep -q "extract_tmp" tui/src/lib/model-install.ts'
 check "C-4 creds format validated"    grep -q 'looksLikeMcpCreds' tui/src/lib/setup.ts
 check "M-1 PORT/CTX_SIZE validated"   grep -q 'validDigits' tui/src/lib/model.ts
 check "demo desktops avoid model/noVNC port collision" bash -c '

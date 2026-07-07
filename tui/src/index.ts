@@ -29,7 +29,7 @@ import { runUninstall, type UninstallKey } from "./lib/uninstall.ts";
 import { buildInvadersScreen } from "./screens/invaders.ts";
 import { modelReasoningMode, setModelReasoningMode, type ModelReasoningMode } from "./lib/config.ts";
 import {
-  LLAMAFILE_DEST, LOCAL_MODEL_SIZE_LABEL, ROOT, MODEL_SERVER_PORT, MODEL_SERVER_URL, CONFIG_FILE,
+  LLAMAFILE_DEST, LOCAL_MODEL_SIZE_LABEL, ROOT, MODEL_SERVER_PID, MODEL_SERVER_PORT, MODEL_SERVER_URL, CONFIG_FILE,
 } from "./lib/constants.ts";
 import { MODEL_SERVER_LOG, serverArgs, modelReady } from "./lib/model.ts";
 import { openUrl, openLlamaWebUi, startMcpProxy, capture, have, startDaemon } from "./lib/exec.ts";
@@ -653,7 +653,11 @@ async function main() {
       polling = false;
     }
   }
-  function back() { backRoute(); busy = false; poll(); }
+  function refreshStatus(delayMs = 0) {
+    if (delayMs > 0) setTimeout(() => { void poll(); }, delayMs);
+    else void poll();
+  }
+  function back() { backRoute(); busy = false; refreshStatus(); }
 
   let flashId = 0;
   function flash(msg: string, color = YELLOW) {
@@ -673,7 +677,12 @@ async function main() {
     run: (onLog: (l: string, s: "stdout" | "stderr") => void, onDone: (ok: boolean) => void) => void | Promise<void>,
   ): void {
     busy = true;
-    showRoute(buildLogScreen(renderer, title, run, () => back()), title);
+    showRoute(buildLogScreen(renderer, title, (onLog, onDone) => {
+      return run(onLog, (ok) => {
+        onDone(ok);
+        void poll();
+      });
+    }, () => back()), title);
   }
 
   menuList.on(SelectRenderableEvents.ITEM_SELECTED, async (_i, opt) => {
@@ -725,12 +734,14 @@ async function main() {
         const startBrowser = () => {
           startMcpProxy();
           if (!Boolean(capture("curl", ["-fsS", MODEL_SERVER_URL]))) {
-            startDaemon(LLAMAFILE_DEST, serverArgs(), { cwd: ROOT, logFile: MODEL_SERVER_LOG });
+            startDaemon(LLAMAFILE_DEST, serverArgs(), { cwd: ROOT, logFile: MODEL_SERVER_LOG, pidFile: MODEL_SERVER_PID });
             flash(`Starting model server on :${MODEL_SERVER_PORT}…`, GREEN);
-            setTimeout(() => { poll(); openLlamaWebUi(); }, 3000);
+            refreshStatus();
+            setTimeout(() => { refreshStatus(); openLlamaWebUi(); }, 3000);
           } else {
             openLlamaWebUi();
             flash("Opening web UI in your browser", GREEN);
+            refreshStatus();
           }
         };
 
@@ -754,7 +765,8 @@ async function main() {
 	                  `Model thinking ${modelReasoningLabel(next).toLowerCase()}${stopped ? " — server stopped; restart chat to apply" : " — applies on next server start"}`,
 	                  GREEN,
 	                );
-	                setTimeout(() => poll(), 500);
+	                refreshStatus();
+	                refreshStatus(500);
 	                return true;
 	              },
 	            },
@@ -794,7 +806,8 @@ async function main() {
 	              onSelect: () => {
 	                const stopped = stopModelServer();
                 flash(stopped ? "✓  Model server stopped" : "⚠  Nothing was running", stopped ? GREEN : YELLOW);
-                setTimeout(() => poll(), 500);
+                refreshStatus();
+                refreshStatus(500);
                 return true;
               },
 	            },
@@ -923,7 +936,8 @@ async function main() {
                       if (p.active) { flash(`Already on ${p.id}`, YELLOW); showCliMenu(); return false; }
                       const okSwitched = useTwilioProfile(p.id);
                       flash(okSwitched ? `✓  Switched to ${p.id}` : `⚠  Could not switch to ${p.id}`, okSwitched ? GREEN : YELLOW);
-                      setTimeout(() => poll(), 500);
+                      refreshStatus();
+                      refreshStatus(500);
                       showCliMenu();
                       return false;
                     },

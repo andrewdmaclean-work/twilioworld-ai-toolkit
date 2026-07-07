@@ -21,11 +21,11 @@
 //   startDaemon()      — long-running background process, own process group.
 
 import { spawn, spawnSync, type ChildProcess } from "child_process";
-import { closeSync, existsSync, mkdirSync, openSync, writeFileSync } from "fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { execSync } from "child_process";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
-import { MCP_PROXY_PORT, MCP_PROXY_SCRIPT, MODEL_SERVER_PORT } from "./constants.ts";
+import { MCP_PROXY_PID, MCP_PROXY_PORT, MCP_PROXY_SCRIPT, MODEL_SERVER_PID, MODEL_SERVER_PORT } from "./constants.ts";
 
 export type LogFn = (line: string, stream: "stdout" | "stderr") => void;
 
@@ -262,12 +262,12 @@ export function openInNewWindow(
 export function startDaemon(
   command: string,
   args: string[],
-  opts: { cwd?: string; env?: NodeJS.ProcessEnv; logFile?: string } = {},
+  opts: { cwd?: string; env?: NodeJS.ProcessEnv; logFile?: string; pidFile?: string } = {},
 ): ChildProcess {
   let logFd: number | undefined;
   if (opts.logFile) {
     mkdirSync(dirname(opts.logFile), { recursive: true });
-    logFd = openSync(opts.logFile, "a");
+    logFd = openSync(opts.logFile, "w");
   }
   const child = spawn("/bin/sh", ["-c", shCmd(command, args)], {
     cwd: opts.cwd,
@@ -276,6 +276,10 @@ export function startDaemon(
     detached: true,
   });
   if (logFd !== undefined) closeSync(logFd);
+  if (opts.pidFile && child.pid) {
+    mkdirSync(dirname(opts.pidFile), { recursive: true });
+    writeFileSync(opts.pidFile, `${child.pid}\n`, { mode: 0o600 });
+  }
   child.unref();
   return child;
 }
@@ -342,23 +346,13 @@ export function fileExecutable(path: string): boolean {
 
 /**
  * Kill the running llamafile model server and the MCP proxy bridge if running.
- * Uses pkill on macOS/Linux (available on both without extra deps).
+ * Uses toolkit-owned PID files so unrelated llamafile processes are left alone.
  * Returns true if a llamafile process was found and signalled.
  */
 export function killModelServer(): boolean {
   // Also stop the proxy bridge — it's always started/stopped with the server.
   killMcpProxy();
-
-  try {
-    if (process.platform === "win32") {
-      const res = spawnSync("taskkill", ["/F", "/IM", "llamafile.exe"], { stdio: "ignore" });
-      return res.status === 0;
-    }
-    const res = spawnSync("pkill", ["-f", "llamafile"], { stdio: "ignore" });
-    return res.status === 0;
-  } catch {
-    return false;
-  }
+  return killPidFile(MODEL_SERVER_PID);
 }
 
 /**
@@ -370,18 +364,42 @@ export function killModelServer(): boolean {
 export function startMcpProxy(): void {
   if (!existsSync(MCP_PROXY_SCRIPT)) return;
   killMcpProxy(); // evict any leftover from a previous run
-  startDaemon("node", [MCP_PROXY_SCRIPT, "https://mcp.twilio.com/docs", String(MCP_PROXY_PORT)]);
+  startDaemon("node", [MCP_PROXY_SCRIPT, "https://mcp.twilio.com/docs", String(MCP_PROXY_PORT)], { pidFile: MCP_PROXY_PID });
 }
 
 function killMcpProxy(): void {
+  killPidFile(MCP_PROXY_PID);
+}
+
+function pidFromFile(pidFile: string): number | null {
+  try {
+    const pid = Number.parseInt(readFileSync(pidFile, "utf8").trim(), 10);
+    return Number.isInteger(pid) && pid > 1 ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+function killPidFile(pidFile: string): boolean {
+  const pid = pidFromFile(pidFile);
+  if (!pid) return false;
   try {
     if (process.platform === "win32") {
-      // match the mcp-proxy.js script path in the process args
-      spawnSync("wmic", ["process", "where", `CommandLine like '%mcp-proxy.js%'`, "delete"], { stdio: "ignore" });
-    } else {
-      spawnSync("pkill", ["-f", "mcp-proxy.js"], { stdio: "ignore" });
+      const res = spawnSync("taskkill", ["/F", "/T", "/PID", String(pid)], { stdio: "ignore" });
+      rmSync(pidFile, { force: true });
+      return res.status === 0;
     }
-  } catch { /* best-effort */ }
+    try {
+      process.kill(-pid, "SIGTERM");
+    } catch {
+      process.kill(pid, "SIGTERM");
+    }
+    rmSync(pidFile, { force: true });
+    return true;
+  } catch {
+    rmSync(pidFile, { force: true });
+    return false;
+  }
 }
 
 /**

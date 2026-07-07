@@ -80,6 +80,7 @@ export const MODEL_SERVER_PORT = validPort(process.env.MODEL_SERVER_PORT ?? proc
 export const MODEL_SERVER_BASE_URL = `http://127.0.0.1:${MODEL_SERVER_PORT}`;
 export const MODEL_SERVER_URL = `${MODEL_SERVER_BASE_URL}/v1/models`;
 export const MODEL_SERVER_LOG = join(MODELS_DIR, "pi-server.log");
+export const MODEL_SERVER_PID = join(CONFIG_DIR, "model-server.pid");
 
 // ── MCP proxy bridge ─────────────────────────────────────────────────
 // llamafile 0.10.3 is compiled without CPPHTTPLIB_OPENSSL_SUPPORT so its
@@ -88,6 +89,7 @@ export const MODEL_SERVER_LOG = join(MODELS_DIR, "pi-server.log");
 export const MCP_PROXY_PORT   = 18080;
 export const MCP_PROXY_URL    = `http://127.0.0.1:${MCP_PROXY_PORT}/`;
 export const MCP_PROXY_SCRIPT = join(TOOLS_DIR, "mcp-proxy.js");
+export const MCP_PROXY_PID    = join(CONFIG_DIR, "mcp-proxy.pid");
 
 // ── Web UI config ─────────────────────────────────────────────────────
 // llamafile's --ui-config-file seeds the web UI's default settings at

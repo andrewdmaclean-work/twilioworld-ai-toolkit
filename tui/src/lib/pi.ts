@@ -13,6 +13,7 @@ import {
   LLAMAFILE_DEST,
   MODEL_SERVER_BASE_URL,
   MODEL_SERVER_LOG,
+  MODEL_SERVER_PID,
   MODEL_SERVER_PORT,
   MODEL_SERVER_URL,
   PI_AGENT_DIR,
@@ -22,7 +23,7 @@ import {
   SKILLS_DIR,
 } from "./constants.ts";
 import { writePiMcpConfig } from "./pi-mcp.ts";
-import { serverArgs } from "./model.ts";
+import { modelStartupStatus, serverArgs, waitForModelServer } from "./model.ts";
 import { statSync } from "fs";
 import { pathNodeVersion, supportsPiNode } from "./node-version.ts";
 
@@ -106,12 +107,19 @@ export async function launchPi(opts: { onLog: LogFn }): Promise<NewWindowResult>
 
   // Ensure model server is running
   if (!isModelServerRunning()) {
-    onLog("▶ Starting local Gemma service…", "stdout");
-    startDaemon(LLAMAFILE_DEST, serverArgs(), { cwd: ROOT, logFile: MODEL_SERVER_LOG });
-    // Give it a few seconds to start
-    await new Promise<void>((resolve) => setTimeout(resolve, 3000));
-    if (!isModelServerRunning()) {
-      onLog(`⚠  Gemma service did not respond yet — Pi may be slow to start. Logs: ${MODEL_SERVER_LOG}`, "stderr");
+    onLog(`▶ Starting local Gemma service (${modelStartupStatus()})…`, "stdout");
+    startDaemon(LLAMAFILE_DEST, serverArgs(), { cwd: ROOT, logFile: MODEL_SERVER_LOG, pidFile: MODEL_SERVER_PID });
+    const ready = await waitForModelServer({
+      timeoutSeconds: 90,
+      onTick: (elapsed, status) => {
+        if (elapsed === 1 || elapsed % 10 === 0) {
+          onLog(`   Loading Gemma service… ${elapsed}s elapsed (${status})`, "stdout");
+        }
+      },
+    });
+    if (!ready) {
+      onLog(`✗ Gemma service did not respond after 90s. Logs: ${MODEL_SERVER_LOG}`, "stderr");
+      return { ok: false, error: `Gemma service did not respond after 90s. See ${MODEL_SERVER_LOG}` };
     } else {
       onLog(`✓ Gemma service ready on :${MODEL_SERVER_PORT}`, "stdout");
     }

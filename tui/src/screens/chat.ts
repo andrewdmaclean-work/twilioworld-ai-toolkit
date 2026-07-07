@@ -6,8 +6,8 @@ import {
   TextRenderable,
   type CliRenderer,
 } from "@opentui/core";
-import { MODEL_SERVER_LOG, modelReady, modelRunning, serverArgs } from "../lib/model.ts";
-import { LLAMAFILE_DEST, MODEL_SERVER_PORT, MODEL_SERVER_URL, ROOT } from "../lib/constants.ts";
+import { MODEL_SERVER_LOG, modelReady, modelRunning, modelStartupStatus, serverArgs, waitForModelServer } from "../lib/model.ts";
+import { LLAMAFILE_DEST, MODEL_SERVER_PID, MODEL_SERVER_PORT, MODEL_SERVER_URL, ROOT } from "../lib/constants.ts";
 import { startDaemon } from "../lib/exec.ts";
 import { CHAT_TOOLS, runChatTool, type ToolCall } from "../lib/chat-tools.ts";
 import {
@@ -33,6 +33,8 @@ interface ChatChoiceMessage {
   reasoning_content?: string | null;
   tool_calls?: ToolCall[];
 }
+
+type StreamToolCall = ToolCall & { index?: number };
 
 const CHAT_URL = MODEL_SERVER_URL.replace(/\/models$/, "/chat/completions");
 const MODEL_ID = "gemma4-e2b";
@@ -75,19 +77,6 @@ function wrap(text: string, width: number): string {
   return lines.join("\n");
 }
 
-async function sleep(ms: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitForServer(onTick: (elapsedSeconds: number) => void): Promise<boolean> {
-  for (let i = 0; i < 90; i++) {
-    if (modelRunning()) return true;
-    onTick(i + 1);
-    await sleep(1000);
-  }
-  return false;
-}
-
 function stripReasoning(text: string): string {
   return text
     .replace(/<\|think\|>[\s\S]*?<\|\/think\|>/g, "")
@@ -117,6 +106,12 @@ export function plainTextChatResponse(text: string): string {
     .trim();
 }
 
+function visibleAssistantText(text: string): string {
+  return plainTextChatResponse(stripReasoning(text
+    .replace(/<\|think\|>[\s\S]*?(?:<\|\/think\|>|$)/g, "")
+    .replace(/<think>[\s\S]*?(?:<\/think>|$)/g, "")));
+}
+
 function assistantMessage(payload: unknown): ChatChoiceMessage {
   const obj = payload as {
     choices?: Array<{ message?: ChatChoiceMessage; text?: string }>;
@@ -131,6 +126,107 @@ function assistantMessage(payload: unknown): ChatChoiceMessage {
 function trimForModel(text: string, max = 6000): string {
   if (text.length <= max) return text;
   return `${text.slice(0, max)}\n\n[tool result truncated to ${max} characters]`;
+}
+
+function mergeToolCall(target: StreamToolCall, delta: StreamToolCall): void {
+  if (delta.id) target.id = delta.id;
+  if (delta.type) target.type = delta.type;
+  const fn = delta.function;
+  if (!fn) return;
+  target.function = target.function ?? {};
+  if (fn.name) target.function.name = `${target.function.name ?? ""}${fn.name}`;
+  if (fn.arguments) target.function.arguments = `${target.function.arguments ?? ""}${fn.arguments}`;
+}
+
+async function streamChatCompletion(
+  messages: ChatMessage[],
+  onVisibleText: (text: string) => void,
+): Promise<ChatChoiceMessage> {
+  const res = await fetch(CHAT_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer local",
+    },
+    body: JSON.stringify({
+      model: MODEL_ID,
+      messages,
+      tools: CHAT_TOOLS,
+      tool_choice: "auto",
+      stream: true,
+      temperature: 0.2,
+      max_tokens: 700,
+    }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.body) return assistantMessage(await res.json());
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  const toolCalls: StreamToolCall[] = [];
+  let content = "";
+  let reasoningContent = "";
+  let buffer = "";
+
+  function handlePayload(raw: string): void {
+    if (!raw || raw === "[DONE]") return;
+    const chunk = JSON.parse(raw) as {
+      error?: { message?: string };
+      choices?: Array<{
+        text?: string;
+        delta?: {
+          content?: string | null;
+          reasoning_content?: string | null;
+          tool_calls?: StreamToolCall[];
+        };
+        message?: ChatChoiceMessage;
+      }>;
+    };
+    if (chunk.error?.message) throw new Error(chunk.error.message);
+    const choice = chunk.choices?.[0];
+    if (!choice) return;
+
+    if (choice.message) {
+      content += choice.message.content ?? "";
+      reasoningContent += choice.message.reasoning_content ?? "";
+      for (const call of choice.message.tool_calls ?? []) {
+        const index = (call as StreamToolCall).index ?? toolCalls.length;
+        toolCalls[index] = call;
+      }
+    }
+
+    const text = choice.delta?.content ?? choice.text ?? "";
+    if (text) {
+      content += text;
+      onVisibleText(visibleAssistantText(content));
+    }
+    if (choice.delta?.reasoning_content) reasoningContent += choice.delta.reasoning_content;
+    for (const call of choice.delta?.tool_calls ?? []) {
+      const index = call.index ?? toolCalls.length;
+      toolCalls[index] = toolCalls[index] ?? { id: "", type: "function", function: {} };
+      mergeToolCall(toolCalls[index], call);
+    }
+  }
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) continue;
+      handlePayload(trimmed.slice(5).trim());
+    }
+  }
+  if (buffer.trim().startsWith("data:")) handlePayload(buffer.trim().slice(5).trim());
+
+  return {
+    content,
+    reasoning_content: reasoningContent,
+    tool_calls: toolCalls.filter((call) => call.function?.name || call.function?.arguments),
+  };
 }
 
 export function buildChatScreen(renderer: CliRenderer, onCancel: () => void): BoxRenderable {
@@ -204,6 +300,10 @@ export function buildChatScreen(renderer: CliRenderer, onCancel: () => void): Bo
     return line;
   }
 
+  function updateLine(line: TextRenderable, label: string, content: string): void {
+    line.content = wrap(`${label} ${content}`, Math.max(40, (transcript.width ?? renderer.width) - 8));
+  }
+
   async function ensureServer(): Promise<boolean> {
     if (serverReady || modelRunning()) {
       serverReady = true;
@@ -218,11 +318,21 @@ export function buildChatScreen(renderer: CliRenderer, onCancel: () => void): Bo
     if (!serverStarting) {
       footer.content = `  Starting local model server on :${MODEL_SERVER_PORT}...`;
       footer.fg = THEME.yellow;
-      startDaemon(LLAMAFILE_DEST, serverArgs(), { cwd: ROOT, logFile: MODEL_SERVER_LOG });
-      serverStarting = waitForServer((elapsed) => {
-        footer.content = `  Loading local model on :${MODEL_SERVER_PORT} (${elapsed}s elapsed)...`;
-        footer.fg = THEME.yellow;
+      addLine("System:", `Starting local model server on :${MODEL_SERVER_PORT}. Logs: ${MODEL_SERVER_LOG}`, THEME.dim2);
+      startDaemon(LLAMAFILE_DEST, serverArgs(), { cwd: ROOT, logFile: MODEL_SERVER_LOG, pidFile: MODEL_SERVER_PID });
+      serverStarting = waitForModelServer({
+        timeoutSeconds: 90,
+        onTick: (elapsed, status) => {
+          footer.content = `  Loading local model on :${MODEL_SERVER_PORT} (${elapsed}s elapsed) — ${status}`;
+          footer.fg = THEME.yellow;
+        },
       });
+      void serverStarting.then((ok) => {
+        if (!ok) addLine("System:", `Model server did not respond after 90s. Last status: ${modelStartupStatus()}.`, THEME.yellow);
+      });
+    } else {
+      footer.content = `  Waiting for model server on :${MODEL_SERVER_PORT}...`;
+      footer.fg = THEME.yellow;
     }
     serverReady = await serverStarting;
     if (!serverReady) serverStarting = null;
@@ -246,38 +356,40 @@ export function buildChatScreen(renderer: CliRenderer, onCancel: () => void): Bo
       return;
     }
 
-    footer.content = "  Waiting for local model response...";
+    footer.content = "  Sending prompt to local model...";
     footer.fg = THEME.yellow;
     try {
       let reply = "";
+      let wroteReply = false;
       for (let turn = 0; turn < 4; turn++) {
-        const res = await fetch(CHAT_URL, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            authorization: "Bearer local",
-          },
-          body: JSON.stringify({
-            model: MODEL_ID,
-            messages: history,
-            tools: CHAT_TOOLS,
-            tool_choice: "auto",
-            stream: false,
-            temperature: 0.2,
-            max_tokens: 700,
-          }),
+        let streamed = "";
+        let firstTextAt = 0;
+        const startedAt = Date.now();
+        const assistantLine = addLine("Gemma:", "working...", THEME.silver);
+        footer.content = turn === 0
+          ? "  Prompt processing locally..."
+          : "  Tool result sent — summarizing locally...";
+        const message = await streamChatCompletion(history, (visibleText) => {
+          streamed = visibleText;
+          if (visibleText && !firstTextAt) {
+            firstTextAt = Date.now();
+            footer.content = `  Streaming local model response... first text in ${Math.max(1, Math.round((firstTextAt - startedAt) / 1000))}s`;
+          }
+          updateLine(assistantLine, "Gemma:", visibleText || "working...");
+          footer.fg = THEME.yellow;
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const message = assistantMessage(await res.json());
         const toolCalls = message.tool_calls ?? [];
         if (!toolCalls.length) {
-          reply = plainTextChatResponse(stripReasoning(message.content ?? "")) || "(empty response)";
+          reply = streamed || visibleAssistantText(message.content ?? "") || "(empty response)";
+          updateLine(assistantLine, "Gemma:", reply);
+          wroteReply = true;
           break;
         }
 
+        updateLine(assistantLine, "Gemma:", "checking Twilio tools...");
         history.push({
           role: "assistant",
-          content: plainTextChatResponse(stripReasoning(message.content ?? "")),
+          content: visibleAssistantText(message.content ?? ""),
           tool_calls: toolCalls,
         });
 
@@ -293,7 +405,7 @@ export function buildChatScreen(renderer: CliRenderer, onCancel: () => void): Bo
         }
       }
       if (!reply) reply = "I called tools, but the local model did not produce a final answer.";
-      addLine("Gemma:", reply, THEME.silver);
+      if (!wroteReply) addLine("Gemma:", reply, THEME.silver);
       history.push({ role: "assistant", content: reply });
       footer.content = "  Enter send    PageUp/PageDown scroll    Escape dashboard";
       footer.fg = THEME.dim;

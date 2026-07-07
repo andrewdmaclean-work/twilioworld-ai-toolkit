@@ -2,33 +2,17 @@
 // Install choices are already written to config.json before this is called.
 
 import {
-  chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync,
-  readSync, renameSync, rmSync, statSync, writeFileSync,
+  chmodSync, existsSync, mkdirSync, writeFileSync,
 } from "fs";
-import { homedir, platform } from "os";
+import { homedir } from "os";
 import { join } from "path";
-import { capture, fileExecutable, have, runStreaming, type LogFn } from "./exec.ts";
+import { capture, have, runStreaming, type LogFn } from "./exec.ts";
 import { addonEnabled } from "./config.ts";
-import { twilioFactAt } from "./twilio-facts.ts";
+import { installLocalModel } from "./model-install.ts";
 import {
   CONFIG_DIR,
-  DOCS_MCP_URL,
-  GGUF_DEST,
-  GGUF_MIN_BYTES,
-  GGUF_MMPROJ,
-  GGUF_STAGING,
-  LLAMAFILE_DEST,
-  LLAMAFILE_SIZE_BYTES,
-  LLAMAFILE_SIZE_LABEL,
-  LLAMAFILE_URL,
-  LOCAL_MODEL_SIZE_BYTES,
-  LOCAL_MODEL_SIZE_LABEL,
-  MODELS_DIR,
   ROOT,
   SKILLS_DIR,
-  TOOLS_DIR,
-  TWILIO_MCP_PKG,
-  GGUF_URL,
 } from "./constants.ts";
 
 function ok(msg: string, onLog: LogFn) { onLog(`✓ ${msg}`, "stdout"); }
@@ -37,85 +21,6 @@ function err(msg: string, onLog: LogFn) { onLog(`✗ ${msg}`, "stderr"); }
 function say(msg: string, onLog: LogFn) { onLog(msg, "stdout"); }
 function step(msg: string, onLog: LogFn) { onLog(`\n▶ ${msg}`, "stdout"); }
 function stepDone(msg: string, onLog: LogFn) { onLog(`☑ ${msg}`, "stdout"); }
-
-function sizeLabel(bytes: number): string {
-  if (bytes < 1_048_576) return `${(bytes / 1024).toFixed(0)} KB`;
-  if (bytes < 1_073_741_824) return `${(bytes / 1_048_576).toFixed(1)} MB`;
-  return `${(bytes / 1_073_741_824).toFixed(2)} GB`;
-}
-
-function startProgressLogger(
-  dest: string,
-  totalBytes: number,
-  intervalMs: number,
-  onLog: LogFn,
-  opts: { facts?: boolean } = {},
-): ReturnType<typeof setInterval> {
-  let tick = 0;
-  if (opts.facts) onLog(`   Twilio AI tip: ${twilioFactAt(tick++)}`, "stdout");
-  return setInterval(() => {
-    try {
-      const downloaded = existsSync(dest) ? statSync(dest).size : 0;
-      const pct = totalBytes > 0 ? Math.min(100, Math.round((downloaded / totalBytes) * 100)) : 0;
-      onLog(`   downloading… ${sizeLabel(downloaded)} / ${sizeLabel(totalBytes)}  (${pct}%)`, "stdout");
-      if (opts.facts && tick % 5 === 0) onLog(`   Twilio AI tip: ${twilioFactAt(tick / 5)}`, "stdout");
-      tick++;
-    } catch { /* file not yet visible — ignore */ }
-  }, intervalMs);
-}
-
-function elapsedLabel(startedAt: number): string {
-  const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const rest = seconds % 60;
-  return `${minutes}m ${rest}s`;
-}
-
-function startExtractionLogger(onLog: LogFn): ReturnType<typeof setInterval> {
-  const startedAt = Date.now();
-  let tick = 0;
-  return setInterval(() => {
-    onLog(`   extracting… still working (${elapsedLabel(startedAt)} elapsed)`, "stdout");
-    if (tick % 3 === 0) onLog(`   Twilio AI tip: ${twilioFactAt(tick / 3)}`, "stdout");
-    tick++;
-  }, 5000);
-}
-
-// ── Security audit M-3/E-2: bound redirects and support resuming a
-// partial download instead of forcing a full re-download on a dropped
-// connection (common on shared/conference wifi with multi-GB payloads).
-function curlDownloadArgs(url: string, dest: string): string[] {
-  return ["-fL", "--max-redirs", "5", "-C", "-", "--no-progress-meter", url, "-o", dest];
-}
-
-// ── Security audit C-1/H-3: a network failure or captive-portal page can
-// leave HTML/garbage at the destination path instead of a real binary.
-// Check for a recognizable executable magic number before chmod +x runs.
-// llamafile ships as a cosmopolitan/APE binary, which — regardless of host
-// OS — always starts with the "MZ" bytes (it's simultaneously a valid PE
-// header, ELF loader stub, and shell script). This is a structural check,
-// not a substitute for pinning a hash; see LLAMAFILE_SHA256 below.
-function looksLikeExecutable(path: string): boolean {
-  try {
-    const fd = openSync(path, "r");
-    try {
-      const buf = Buffer.alloc(4);
-      const n = readSync(fd, buf, 0, 4, 0);
-      if (n < 2) return false;
-      // MZ (PE/APE — what llamafile actually ships), ELF, or Mach-O.
-      if (buf[0] === 0x4d && buf[1] === 0x5a) return true; // MZ
-      if (buf.equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46]))) return true; // \x7fELF
-      const magic = buf.readUInt32BE(0);
-      if ([0xfeedface, 0xfeedfacf, 0xcefaedfe, 0xcffaedfe, 0xcafebabe].includes(magic)) return true; // Mach-O / FAT
-      return false;
-    } finally {
-      closeSync(fd);
-    }
-  } catch {
-    return false;
-  }
-}
 
 // ── Security audit C-4 (defense-in-depth): exec.ts's shCmd()/q() already
 // single-quote-escapes every arg before it reaches a shell, so this isn't
@@ -135,37 +40,6 @@ function writeMcpCredsFile(creds: string): string {
   writeFileSync(envFile, `export TWILIO_MCP_CREDS="${creds}"\n`, { mode: 0o600 });
   chmodSync(envFile, 0o600); // belt-and-suspenders in case umask altered the create mode
   return envFile;
-}
-
-// ── Model helpers ─────────────────────────────────────────────────────
-function ggufSizeOk(): boolean {
-  if (!existsSync(GGUF_DEST)) return false;
-  try { return statSync(GGUF_DEST).size >= GGUF_MIN_BYTES; } catch { return false; }
-}
-
-function ggufStagingExists(): boolean { return existsSync(GGUF_STAGING); }
-function runtimeOk(): boolean { return fileExecutable(LLAMAFILE_DEST); }
-
-// ── Disk space preflight (df -k portable) ────────────────────────────
-function freeKb(): number {
-  try {
-    const out = capture("df", ["-k", MODELS_DIR.replace(/\/models$/, "") || ROOT]);
-    const match = out.split("\n").find((l) => !l.startsWith("Filesystem"));
-    if (!match) return Infinity;
-    const parts = match.trim().split(/\s+/);
-    return parseInt(parts[3] ?? "0", 10);
-  } catch { return Infinity; }
-}
-
-// ── GGUF extraction helpers ───────────────────────────────────────────
-function findGgufs(dir: string): string[] {
-  const found: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) found.push(...findGgufs(full));
-    else if (entry.isFile() && entry.name.endsWith(".gguf")) found.push(full);
-  }
-  return found;
 }
 
 // ── Main export ───────────────────────────────────────────────────────
@@ -296,96 +170,9 @@ export async function runSetup(opts: {
   step("☐ [4/6] Local AI model — Gemma 4 E2B via llamafile", onLog);
   if (!addonEnabled("localGemma")) {
     warn("Local Gemma not selected — skipping", onLog);
-  } else if (runtimeOk() && ggufSizeOk()) {
-    ok("llamafile runtime already present", onLog);
-    ok("Model weights already present", onLog);
-    if (existsSync(GGUF_MMPROJ)) ok("mmproj (multimodal) already present", onLog);
   } else {
-    const freeKbVal = freeKb();
-    if (freeKbVal < 5_242_880) {
-      warn(`Only ${Math.round(freeKbVal / 1024)}MB free — need ~5GB. Free up space then re-run.`, onLog);
-    } else {
-      // Llamafile runtime
-      if (!runtimeOk()) {
-        say(`   Downloading llamafile runtime (~${LLAMAFILE_SIZE_LABEL})…`, onLog);
-        mkdirSync(TOOLS_DIR, { recursive: true });
-        const runtimeProgress = startProgressLogger(LLAMAFILE_DEST, LLAMAFILE_SIZE_BYTES, 3000, onLog);
-        const res = await runStreaming("curl", curlDownloadArgs(LLAMAFILE_URL, LLAMAFILE_DEST), { cwd: ROOT, onLog });
-        clearInterval(runtimeProgress);
-        if (res.ok && !looksLikeExecutable(LLAMAFILE_DEST)) {
-          err("Downloaded file doesn't look like a real binary (captive portal page or corrupt transfer?) — removing it.", onLog);
-          rmSync(LLAMAFILE_DEST, { force: true });
-        } else if (res.ok) {
-          chmodSync(LLAMAFILE_DEST, 0o755);
-          ok("llamafile runtime ready", onLog);
-        } else {
-          err("Runtime download failed", onLog);
-        }
-      } else {
-        ok("llamafile runtime already present", onLog);
-      }
-
-      // GGUF weights
-      if (!ggufSizeOk()) {
-        // Clean up corrupt/partial dest if it exists
-        if (existsSync(GGUF_DEST)) {
-          const size = statSync(GGUF_DEST).size;
-          warn(`Found incomplete model file (${Math.round(size / 1024 / 1024)}MB < 1.5GB) — will re-download.`, onLog);
-          rmSync(GGUF_DEST);
-        }
-
-        mkdirSync(MODELS_DIR, { recursive: true });
-        if (!ggufStagingExists()) {
-          say(`   Downloading Gemma 4 E2B from Kaggle (~${LOCAL_MODEL_SIZE_LABEL})…`, onLog);
-          const weightsProgress = startProgressLogger(GGUF_STAGING, LOCAL_MODEL_SIZE_BYTES, 3000, onLog, { facts: true });
-          const res = await runStreaming("curl", curlDownloadArgs(GGUF_URL, GGUF_STAGING), { cwd: ROOT, onLog });
-          clearInterval(weightsProgress);
-          if (!res.ok) {
-            err("Download failed — partial file kept at " + GGUF_STAGING + " so re-running Setup can resume it.", onLog);
-          }
-        } else {
-          const sz = statSync(GGUF_STAGING).size;
-          ok(`Archive already present (${(sz / 1_073_741_824).toFixed(1)}GB) — skipping download`, onLog);
-        }
-
-        if (ggufStagingExists()) {
-          say("   Extracting… this can take a few minutes on a Pi-class machine.", onLog);
-          // Security audit C-3: the old predictable extraction path was
-          // removed with rm -rf then recreated with mkdir -p, leaving a
-          // gap an attacker on a shared/multi-user box could win by
-          // planting a symlink there first (TOCTOU). mkdtempSync asks the
-          // OS for an exclusively-created, unpredictable directory name
-          // instead — there's no gap to race.
-          const extractTmp = mkdtempSync(join(MODELS_DIR, "extract-"));
-          const extractProgress = startExtractionLogger(onLog);
-          const tarRes = await runStreaming("tar", ["-xf", GGUF_STAGING, "-C", extractTmp], { cwd: ROOT, onLog });
-          clearInterval(extractProgress);
-          if (!tarRes.ok) {
-            err("Extraction failed", onLog);
-          } else {
-            const allGgufs = findGgufs(extractTmp);
-            const mmproj = allGgufs.find((f) => f.includes("mmproj"));
-            const mains = allGgufs.filter((f) => !f.includes("mmproj"));
-            // Largest main GGUF
-            const mainGguf = mains.sort((a, b) => statSync(b).size - statSync(a).size)[0];
-            if (mainGguf) {
-              renameSync(mainGguf, GGUF_DEST);
-              if (mmproj) renameSync(mmproj, GGUF_MMPROJ);
-              rmSync(extractTmp, { recursive: true, force: true });
-              const sz = statSync(GGUF_DEST).size;
-              ok(`Model ready (${(sz / 1_073_741_824).toFixed(1)}GB)`, onLog);
-              ok(`Archive kept at ${GGUF_STAGING} — delete it to reclaim ~${LOCAL_MODEL_SIZE_LABEL}`, onLog);
-            } else {
-              err("No main model GGUF found in archive. Left everything in place:", onLog);
-              err("  Archive:   " + GGUF_STAGING, onLog);
-              err("  Extracted: " + extractTmp, onLog);
-            }
-          }
-        }
-      } else {
-        ok("Model weights already present", onLog);
-      }
-    }
+    const modelOk = await installLocalModel({ onLog, keepArchiveNotice: true });
+    if (!modelOk) { onDone(false); return; }
   }
   stepDone("[4/6] Local AI model — Gemma 4 E2B via llamafile", onLog);
 
