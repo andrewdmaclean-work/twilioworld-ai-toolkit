@@ -336,6 +336,76 @@ renders chat inside the OpenTUI dashboard, so the toolkit does not appear to exi
 when you choose **Chat with Twilio**. Tools (OpenCode, Cursor, etc.) can connect
 to `http://127.0.0.1:8080/v1` at the same time.
 
+### The built-in web UI on `:8080`
+
+llamafile is Mozilla's packaging of [llama.cpp](https://github.com/ggml-org/llama.cpp)'s
+server, so when the model server is running it exposes **two things on the same
+port 8080**:
+
+| Path | What it is | Who uses it |
+| --- | --- | --- |
+| `http://127.0.0.1:8080/` | llama.cpp's built-in **web chat UI**, compiled into the llamafile binary | you, in a browser — a quick way to poke the raw model |
+| `http://127.0.0.1:8080/v1` | the **OpenAI-compatible API** | the toolkit's in-app chat, OpenCode, Cursor, Pi, etc. |
+
+The web UI itself ships inside the `tools/llamafile` binary downloaded during
+Setup — this toolkit doesn't build it. But with the MCP proxy enabled (below),
+the toolkit automatically opens the web UI in your browser and pre-configures
+it: the Twilio Docs MCP server is wired in and a Twilio-aware system message is
+set, so it behaves like a Twilio-aware assistant from the first message — no
+manual Settings navigation required. Use **Chat with Twilio** in the TUI (or a
+configured agent) for the toolkit's full tool surface (Skills, status/config
+introspection); use the web UI at `:8080/` when you want that Twilio-aware
+assistant in a plain browser tab instead.
+
+> The web UI binds to `127.0.0.1` only — it is not exposed off your machine. If you
+> run the model server inside one of the `demo/` GUI containers, note that noVNC
+> also historically used 8080; the demo containers serve noVNC on a different port
+> so the two don't collide (see each `demo/*/README.md`).
+
+### Setting up the Twilio MCP server inside the web UI (experimental)
+
+llama.cpp's web UI has its own MCP client, separate from — and much more limited
+than — the toolkit's Skills/Docs MCP/Execute MCP wiring for coding agents. Two
+real constraints, straight from upstream llama.cpp:
+
+- **HTTP/SSE/WebSocket only — no stdio.** The Docs MCP (`https://mcp.twilio.com/docs`,
+  no auth) works. The **Execute MCP does not** — it launches via
+  `npx @twilio-alpha/mcp ...` over stdio, which a browser cannot spawn. Use a
+  configured agent (Configure agent → any agent) for Execute MCP instead.
+- **The bundled llamafile has no OpenSSL.** llamafile 0.10.3's CORS proxy
+  (`--ui-mcp-proxy`) can only reach `http://` targets — pointing the web UI
+  directly at `https://mcp.twilio.com/docs` fails with
+  `HTTPS requested but CPPHTTPLIB_OPENSSL_SUPPORT is not defined`. The toolkit
+  works around this with a tiny local HTTP→HTTPS bridge (see below).
+
+**1. Turn it on** — check **"Enable MCP in the local model web UI"** in Setup (off
+by default; it's experimental, and llama.cpp's own docs say "do not enable in
+untrusted environments" since it opens a CORS proxy in the local server).
+
+**2. That's it.** From then on, any time you choose **Model server** or **Chat
+with Twilio** from the menu, the toolkit starts everything wired up and opens the
+web UI already configured — no clicking through Settings, no pasting URLs.
+
+Under the hood, when the addon is on the toolkit:
+- passes `--ui-mcp-proxy` to enable llama.cpp's browser CORS proxy
+- writes `.toolkit/webui/ui-config.json` and passes it via
+  `--ui-config-file` — this is llamafile's built-in mechanism for seeding the
+  web UI's default settings **server-side**, so the Twilio Docs MCP server and a
+  Twilio-aware system message are present the first time the UI loads (no
+  browser `localStorage` injection)
+- starts `tools/mcp-proxy.js` — a dependency-free Node.js HTTP→HTTPS bridge on
+  `127.0.0.1:18080` that forwards to `https://mcp.twilio.com/docs`. The web UI's
+  MCP server is set to `http://127.0.0.1:18080/`, so the request path is
+  `browser → llamafile /cors-proxy (plain HTTP) → bridge → mcp.twilio.com`.
+
+The full chain (web UI → CORS proxy → bridge → Twilio) completes a real MCP
+`initialize` handshake — verified end to end.
+
+> `--ui-config-file` and `--ui-mcp-proxy` are new upstream (llama.cpp PR
+> [#18655](https://github.com/ggml-org/llama.cpp/pull/18655)) and marked
+> experimental. If a future llamafile ships with OpenSSL, the bridge becomes
+> unnecessary and the config can point straight at `https://mcp.twilio.com/docs`.
+
 The in-app chat starts the local server with reasoning disabled and supports a small
 safe tool surface for toolkit introspection: local status, install choices, and
 local Twilio Skill listing. It does **not** call real Twilio APIs from chat; use

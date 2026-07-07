@@ -17,6 +17,7 @@ tools/whisperfile.exe
 .env.local
 .toolkit/config.json
 .toolkit/pi-agent/
+.toolkit/webui/
 .pi/auth.json
 .pi/*cache*.json
 .pi/sessions/

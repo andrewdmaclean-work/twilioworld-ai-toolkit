@@ -1,5 +1,7 @@
 // lib/config.ts — read/write .toolkit/config.json.
-// Reads local config first, then tracked defaults, then legacy defaults.
+// Reads defaults first, then overlays local config — so new addon keys
+// added to toolkit.defaults.json are picked up even by users whose local
+// config pre-dates them.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import {
@@ -15,7 +17,8 @@ export type AddonKey =
   | "executeMcp"
   | "devPhone"
   | "localGemma"
-  | "voiceInput";
+  | "voiceInput"
+  | "llamaUiMcp";
 
 export interface ToolkitConfig {
   version: number;
@@ -29,32 +32,45 @@ const ALL_ADDONS: AddonKey[] = [
   "devPhone",
   "localGemma",
   "voiceInput",
+  "llamaUiMcp",
 ];
 
-function configSource(): string | null {
-  if (existsSync(CONFIG_FILE)) return CONFIG_FILE;
-  if (existsSync(DEFAULT_CONFIG_FILE)) return DEFAULT_CONFIG_FILE;
-  if (existsSync(LEGACY_DEFAULT_CONFIG_FILE)) return LEGACY_DEFAULT_CONFIG_FILE;
-  return null;
-}
-
 export function readConfig(): ToolkitConfig {
-  const src = configSource();
-  const empty: ToolkitConfig = {
-    version: 1,
-    addons: Object.fromEntries(ALL_ADDONS.map((k) => [k, false])) as Record<AddonKey, boolean>,
-  };
-  if (!src) return empty;
-  try {
-    const parsed = JSON.parse(readFileSync(src, "utf8"));
-    const addons = { ...empty.addons };
-    for (const k of ALL_ADDONS) {
-      if (parsed?.addons?.[k] === true) addons[k] = true;
+  const allFalse = Object.fromEntries(ALL_ADDONS.map((k) => [k, false])) as Record<AddonKey, boolean>;
+
+  // Build base from tracked defaults (toolkit.defaults.json or legacy).
+  // This means new addon keys added to defaults are visible to users whose
+  // local config pre-dates them — without it, a key absent from an old
+  // config.json is silently treated as false even when the default is true.
+  const base = { ...allFalse };
+  for (const src of [DEFAULT_CONFIG_FILE, LEGACY_DEFAULT_CONFIG_FILE]) {
+    if (existsSync(src)) {
+      try {
+        const d = JSON.parse(readFileSync(src, "utf8"));
+        for (const k of ALL_ADDONS) {
+          if (d?.addons?.[k] === true) base[k] = true;
+        }
+      } catch { /* ignore */ }
+      break;
     }
-    return { version: parsed.version ?? 1, addons };
-  } catch {
-    return empty;
   }
+
+  // Overlay with local config — only for keys explicitly present there
+  // (boolean true or false). Keys absent from local config keep the
+  // default value built above.
+  if (existsSync(CONFIG_FILE)) {
+    try {
+      const local = JSON.parse(readFileSync(CONFIG_FILE, "utf8"));
+      for (const k of ALL_ADDONS) {
+        if (typeof local?.addons?.[k] === "boolean") base[k] = local.addons[k];
+      }
+      return { version: local.version ?? 1, addons: base };
+    } catch {
+      return { version: 1, addons: base };
+    }
+  }
+
+  return { version: 1, addons: base };
 }
 
 export function addonEnabled(key: AddonKey): boolean {

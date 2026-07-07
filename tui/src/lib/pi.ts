@@ -3,7 +3,7 @@
 // brand-new terminal window, fully detached from the TUI. The dashboard
 // keeps running normally — no suspend/resume needed.
 
-import { copyFileSync, existsSync, mkdirSync, rmSync } from "fs";
+import { copyFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { capture, fileExecutable, have, openInNewWindow, runStreaming, startDaemon, type LogFn, type NewWindowResult } from "./exec.ts";
 import { addonEnabled } from "./config.ts";
@@ -75,23 +75,17 @@ export async function launchPi(opts: { onLog: LogFn }): Promise<NewWindowResult>
     copyFileSync(PI_MODELS_JSON, join(piDir, "models.json"));
   }
 
-  // MCP adapter + config
-  if (addonEnabled("docsMcp") || addonEnabled("executeMcp")) {
-    await runStreaming("pi", ["install", "npm:pi-mcp-adapter"], {
-      cwd: ROOT,
-      env: { ...process.env, PI_CODING_AGENT_DIR: piDir },
-      onLog,
-    });
-    writePiMcpConfig(piDir);
-  }
+  // MCP adapter + config — Docs MCP always, Execute MCP if creds exist.
+  await runStreaming("pi", ["install", "npm:pi-mcp-adapter"], {
+    cwd: ROOT,
+    env: { ...process.env, PI_CODING_AGENT_DIR: piDir },
+    onLog,
+  });
+  writePiMcpConfig(piDir);
 
-  // Skills
-  if (addonEnabled("twilioSkills") && existsSync(SKILLS_DIR)) {
+  // Skills — always wired when the local Skills dir is present.
+  if (existsSync(SKILLS_DIR)) {
     await runStreaming("cp", ["-r", join(SKILLS_DIR, "."), join(piDir, "skills")], { cwd: ROOT, onLog });
-  } else if (!addonEnabled("twilioSkills") && existsSync(join(piDir, "skills"))) {
-    // Clear stale skills if add-on was disabled
-    rmSync(join(piDir, "skills"), { recursive: true, force: true });
-    mkdirSync(join(piDir, "skills"));
   }
 
   // Ensure model server is running
@@ -113,7 +107,7 @@ export async function launchPi(opts: { onLog: LogFn }): Promise<NewWindowResult>
     "--append-system-prompt", PI_ROUTING_PROMPT,
     "--no-skills",
   ];
-  if (addonEnabled("twilioSkills")) {
+  if (existsSync(join(piDir, "skills"))) {
     piArgs.push("--skill", join(piDir, "skills"));
   }
 

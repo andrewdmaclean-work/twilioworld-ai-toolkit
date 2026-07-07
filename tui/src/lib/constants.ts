@@ -34,6 +34,7 @@ export const GGUF_URL =
 // ── Paths ────────────────────────────────────────────────────────────
 export const CONFIG_DIR = join(ROOT, ".toolkit");
 export const CONFIG_FILE = join(CONFIG_DIR, "config.json");
+export const ENV_FILE = join(CONFIG_DIR, ".env");
 export const DEFAULT_CONFIG_FILE = join(ROOT, "toolkit.defaults.json");
 export const LEGACY_DEFAULT_CONFIG_FILE = join(CONFIG_DIR, "defaults.json");
 
@@ -69,3 +70,18 @@ export const VOICE_TMP_DIR = join(MODELS_DIR, "voice");
 
 export const MODEL_SERVER_URL = "http://127.0.0.1:8080/v1/models";
 export const MODEL_SERVER_LOG = join(MODELS_DIR, "pi-server.log");
+
+// ── MCP proxy bridge ─────────────────────────────────────────────────
+// llamafile 0.10.3 is compiled without CPPHTTPLIB_OPENSSL_SUPPORT so its
+// /cors-proxy cannot reach https:// endpoints. tools/mcp-proxy.js is a
+// tiny Node.js HTTP→HTTPS bridge that the web UI points at instead.
+export const MCP_PROXY_PORT   = 18080;
+export const MCP_PROXY_URL    = `http://127.0.0.1:${MCP_PROXY_PORT}/`;
+export const MCP_PROXY_SCRIPT = join(TOOLS_DIR, "mcp-proxy.js");
+
+// ── Web UI config ─────────────────────────────────────────────────────
+// llamafile's --ui-config-file seeds the web UI's default settings at
+// server startup (system message + MCP servers), server-side — no browser
+// localStorage gymnastics needed. We write ui-config.json here and pass it.
+export const WEBUI_DIR         = join(CONFIG_DIR, "webui");
+export const WEBUI_CONFIG_FILE = join(WEBUI_DIR, "ui-config.json");

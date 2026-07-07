@@ -136,8 +136,8 @@ export function buildChatScreen(renderer: CliRenderer, onCancel: () => void): Bo
   const { screen, body, footer } = buildEmbeddedRouteChrome(renderer, {
     id: "chat-screen",
     route: "Dashboard / Chat",
-    title: "Local model chat",
-    subtitle: "OpenTUI chat against the local OpenAI-compatible server.",
+    title: "Chat with Twilio Docs",
+    subtitle: "Local AI chat, grounded in Twilio Skills and Docs MCP.",
     bodyTitle: "Conversation",
     footer: "  Enter send    PageUp/PageDown scroll    Escape dashboard",
   });

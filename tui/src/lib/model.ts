@@ -4,12 +4,14 @@
 
 import { existsSync } from "fs";
 import { capture } from "./exec.ts";
+import { writeWebUiConfig } from "./webui-config.ts";
 import {
   GGUF_DEST,
   GGUF_MIN_BYTES,
   GGUF_MMPROJ,
   LLAMAFILE_DEST,
   MODEL_SERVER_URL,
+  WEBUI_CONFIG_FILE,
 } from "./constants.ts";
 import { statSync } from "fs";
 import { fileExecutable } from "./exec.ts";
@@ -53,8 +55,12 @@ function baseModelArgs(): string[] {
     "--ctx-size", CTX_SIZE,
     "--cache-type-k", "q4_0",
     "--cache-type-v", "q4_0",
-    "--reasoning", "off",
-    "--reasoning-budget", "0",
+    // Reasoning enabled: Pi (and the in-TUI chat) can think before answering.
+    // 'auto' lets the model's chat template decide; -1 budget = unrestricted.
+    // The in-TUI chat strips <think> blocks from its rendered output, so it
+    // stays terse for the user while still letting the model reason.
+    "--reasoning", "auto",
+    "--reasoning-budget", "-1",
   ];
   if (existsSync(GGUF_MMPROJ)) args.push("--mmproj", GGUF_MMPROJ);
   return args;
@@ -62,5 +68,14 @@ function baseModelArgs(): string[] {
 
 /** Args for `llamafile --server` (background daemon). */
 export function serverArgs(): string[] {
-  return ["--server", ...baseModelArgs(), "--host", "127.0.0.1", "--port", PORT];
+  const args = ["--server", ...baseModelArgs(), "--host", "127.0.0.1", "--port", PORT];
+  // Always seed the web UI's default settings server-side: Twilio Docs MCP
+  // server (via the local HTTP→HTTPS bridge) + a Twilio-aware system
+  // message. llamafile's built-in mechanism — no localStorage injection.
+  writeWebUiConfig();
+  args.push("--ui-config-file", WEBUI_CONFIG_FILE);
+  // CORS proxy for MCP. Upstream warning: "do not enable in untrusted
+  // environments." Only binds to 127.0.0.1, so exposure is local-only.
+  args.push("--ui-mcp-proxy");
+  return args;
 }

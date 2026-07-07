@@ -150,13 +150,14 @@ export async function runSetup(opts: {
   step("[2/6] Twilio CLI", onLog);
   if (have("twilio")) {
     ok(`twilio CLI  ${capture("twilio", ["--version"]).split("\n")[0]}`, onLog);
-  } else if (addonEnabled("executeMcp") || addonEnabled("devPhone")) {
-    warn("Twilio CLI not found — installing (required for Execute MCP / Dev Phone)", onLog);
+  } else if (addonEnabled("devPhone")) {
+    warn("Twilio CLI not found — installing (required for Dev Phone)", onLog);
     const res = await runStreaming("npm", ["install", "-g", "twilio-cli"], { cwd: ROOT, onLog });
     if (!res.ok) { err("twilio-cli install failed — see https://www.twilio.com/docs/twilio-cli/quickstart", onLog); onDone(false); return; }
     ok("Twilio CLI installed", onLog);
   } else {
     warn("Twilio CLI not installed — not needed for your selected choices", onLog);
+    say("   (Install it later if you want the Execute MCP or Dev Phone.)", onLog);
   }
 
   // ── Twilio account (optional — only needed for Execute MCP) ────────
@@ -191,10 +192,10 @@ export async function runSetup(opts: {
   // ── Step 3: API key for Execute MCP ───────────────────────────────
   step("[3/6] Execute MCP API key (optional)", onLog);
   let mcpCreds = "";
-  if (!addonEnabled("executeMcp")) {
-    warn("Execute MCP not selected — skipping", onLog);
-  } else if (!activeAccountSid) {
-    warn("No confirmed Twilio account — skipping Execute MCP. Log in with `twilio login` and re-run Setup.", onLog);
+  if (!activeAccountSid) {
+    warn("Not logged in to Twilio CLI — skipping Execute MCP.", onLog);
+    say("   The Execute MCP is wired automatically once creds exist: run", onLog);
+    say("   `twilio login`, then re-run Setup to create a scoped API key.", onLog);
   } else {
     // Check for existing key
     const keysJson = capture("twilio", ["api:core:keys:list", "-o", "json"]);
@@ -362,7 +363,9 @@ export async function runSetup(opts: {
   } catch { /* ignore */ }
   ok(`${skillCount} skills available`, onLog);
 
-  if (addonEnabled("twilioSkills")) {
+  // Always install Skills globally — they're free files on the Agent
+  // Skills standard, read by every configured agent from ~/.agents/skills.
+  {
     const globalSkills = join(homedir(), ".agents", "skills");
     mkdirSync(globalSkills, { recursive: true });
     const res = await runStreaming("cp", ["-r", join(SKILLS_DIR, "."), globalSkills], { cwd: ROOT, onLog });

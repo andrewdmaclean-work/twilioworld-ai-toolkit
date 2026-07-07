@@ -25,6 +25,7 @@ import { existsSync, writeFileSync } from "fs";
 import { execSync } from "child_process";
 import { tmpdir } from "os";
 import { join } from "path";
+import { MCP_PROXY_PORT, MCP_PROXY_SCRIPT } from "./constants.ts";
 
 export type LogFn = (line: string, stream: "stdout" | "stderr") => void;
 
@@ -298,4 +299,59 @@ export function captureAsync(command: string, args: string[], env?: NodeJS.Proce
 
 export function fileExecutable(path: string): boolean {
   try { return existsSync(path); } catch { return false; }
+}
+
+/**
+ * Kill the running llamafile model server and the MCP proxy bridge if running.
+ * Uses pkill on macOS/Linux (available on both without extra deps).
+ * Returns true if a llamafile process was found and signalled.
+ */
+export function killModelServer(): boolean {
+  // Also stop the proxy bridge — it's always started/stopped with the server.
+  killMcpProxy();
+
+  try {
+    if (process.platform === "win32") {
+      const res = spawnSync("taskkill", ["/F", "/IM", "llamafile.exe"], { stdio: "ignore" });
+      return res.status === 0;
+    }
+    const res = spawnSync("pkill", ["-f", "llamafile"], { stdio: "ignore" });
+    return res.status === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Start the HTTP→HTTPS MCP proxy bridge as a background daemon.
+ * Kills any existing instance first so restarts are clean.
+ * The bridge is a plain Node.js script (tools/mcp-proxy.js) with no
+ * npm dependencies — it uses only built-in http/https modules.
+ */
+export function startMcpProxy(): void {
+  if (!existsSync(MCP_PROXY_SCRIPT)) return;
+  killMcpProxy(); // evict any leftover from a previous run
+  startDaemon("node", [MCP_PROXY_SCRIPT, "https://mcp.twilio.com/docs", String(MCP_PROXY_PORT)]);
+}
+
+function killMcpProxy(): void {
+  try {
+    if (process.platform === "win32") {
+      // match the mcp-proxy.js script path in the process args
+      spawnSync("wmic", ["process", "where", `CommandLine like '%mcp-proxy.js%'`, "delete"], { stdio: "ignore" });
+    } else {
+      spawnSync("pkill", ["-f", "mcp-proxy.js"], { stdio: "ignore" });
+    }
+  } catch { /* best-effort */ }
+}
+
+/**
+ * Open the llama.cpp web UI in the browser.
+ *
+ * The Twilio Docs MCP server and system message are seeded server-side via
+ * llamafile's --ui-config-file (see serverArgs() in model.ts), so there's
+ * nothing to inject client-side — just open the page.
+ */
+export function openLlamaWebUi(port = 8080): NewWindowResult {
+  return openUrl(`http://127.0.0.1:${port}/`);
 }

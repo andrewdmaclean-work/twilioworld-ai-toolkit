@@ -85,7 +85,7 @@ check "pi-mcp has directTools"        grep -q 'directTools' tui/src/lib/pi-mcp.t
 check "pi-mcp has eager lifecycle"    grep -q 'eager' tui/src/lib/pi-mcp.ts
 check "pi-mcp has execute mcp guard"  grep -q 'TWILIO_MCP_CREDS' tui/src/lib/pi-mcp.ts
 check "model.ts has server args"      grep -q 'serverArgs\|--server' tui/src/lib/model.ts
-check "model starts reasoning off"    bash -c 'grep -q "\"--reasoning\", \"off\"" tui/src/lib/model.ts && grep -q "\"--reasoning-budget\", \"0\"" tui/src/lib/model.ts'
+check "model starts with reasoning enabled" bash -c 'grep -q "\"--reasoning\", \"auto\"" tui/src/lib/model.ts && grep -q "\"--reasoning-budget\", \"-1\"" tui/src/lib/model.ts'
 check "voice module uses whisperfile" bash -c 'grep -q "transcribeVoiceFile" tui/src/lib/voice.ts && grep -q "WHISPERFILE_DEST" tui/src/lib/voice.ts'
 check "voice uses documented whisper args" bash -c 'grep -q "\"-m\", q(WHISPER_MODEL_DEST)" tui/src/lib/voice.ts && grep -q "\"--no-prints\"" tui/src/lib/voice.ts'
 check "voice input is gated coming soon" bash -c 'grep -q "VOICE_COMING_SOON" tui/src/lib/voice.ts && grep -q "Whisper model is not bundled yet" tui/src/lib/voice.ts'
@@ -100,13 +100,11 @@ check "chat can read skills"         bash -c 'grep -q "search_twilio_skills" tui
 check "chat can use docs MCP"        bash -c 'grep -q "search_twilio_docs_mcp" tui/src/lib/chat-tools.ts && grep -q "twilio__search" tui/src/lib/chat-tools.ts && grep -q "twilio__retrieve" tui/src/lib/chat-tools.ts'
 check "index.ts has all menu items"   bash -c '
   grep -q '"'"'chat'"'"' tui/src/index.ts &&
-  grep -q '"'"'server'"'"' tui/src/index.ts &&
-  grep -q '"'"'devphone'"'"' tui/src/index.ts &&
-  grep -q '"'"'setup'"'"' tui/src/index.ts &&
   grep -q '"'"'agent'"'"' tui/src/index.ts &&
-  grep -q '"'"'signup'"'"' tui/src/index.ts &&
-  grep -q '"'"'aidocs'"'"' tui/src/index.ts &&
-  grep -q '"'"'uninstall'"'"' tui/src/index.ts
+  grep -q '"'"'devphone'"'"' tui/src/index.ts &&
+  grep -q '"'"'cli'"'"' tui/src/index.ts &&
+  grep -q '"'"'resources'"'"' tui/src/index.ts &&
+  grep -q '"'"'exit'"'"' tui/src/index.ts
 '
 check "signup opens TwilioWorld" bash -c '
   grep -q "Sign up for TwilioWorld" tui/src/index.ts &&
@@ -135,7 +133,7 @@ check "README mirrors dashboard labels" bash -c '
   grep -q "twilioworld-agentic-coding-toolkit" README.md
 '
 check "uninstall available from TUI" bash -c '
-  grep -q "buildUninstallScreen" tui/src/index.ts &&
+  grep -q "runUninstall" tui/src/index.ts &&
   grep -q "runUninstall" tui/src/lib/uninstall.ts &&
   grep -q "Uninstall" tui/src/screens/uninstall.ts
 '
@@ -164,7 +162,7 @@ check "configureStandardAgent launches every agent in a new window" bash -c '
 check "OpenCode no longer print-only (launches like the rest)" bash -c '
   ! grep -q "rather than.*opening a new window" tui/src/lib/configure-agent.ts
 '
-check "index uses openInNewWindow"    bash -c 'grep -q "openInNewWindow" tui/src/index.ts && grep -q "openInNewWindow" tui/src/lib/pi.ts'
+check "index uses openInNewWindow"    bash -c 'grep -q "openInNewWindow" tui/src/lib/actions.ts && grep -q "openInNewWindow" tui/src/lib/pi.ts'
 check "no suspend/resume left in index" bash -c '! grep -q "renderer.suspend\|renderer.resume" tui/src/index.ts'
 check "exec.ts has new-window opener" grep -q 'export function openInNewWindow' tui/src/lib/exec.ts
 check "no gum references remain"      bash -c '! grep -RIn "\bgum\b" README.md uninstall.sh tui/src tui/package.json 2>/dev/null'

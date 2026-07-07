@@ -15,10 +15,6 @@ type SetupItem = CheckItem & { key: AddonKey | `__${string}` };
 const ADDON_ITEMS: SetupItem[] = [
   { key: "__local", label: "Local chat", description: "Installs the model used by Chat with Twilio.", heading: true },
   { key: "localGemma"   as AddonKey, label: "Local model for Chat with Twilio",  description: "Required for in-app local chat and Pi (~2.5 GB)" },
-  { key: "__agents", label: "Coding agents", description: "Applied when you choose Configure agent.", heading: true },
-  { key: "twilioSkills" as AddonKey, label: "Install Twilio Skills for agents",      description: "Make Twilio Skills available to coding agents" },
-  { key: "docsMcp"      as AddonKey, label: "Add Docs MCP to agents",           description: "Give coding agents live Twilio API search" },
-  { key: "executeMcp"   as AddonKey, label: "Add Execute MCP to agents",        description: "Let agents call real Twilio APIs — experimental" },
   { key: "__tools", label: "Twilio tools", description: "Optional local tools.", heading: true },
   { key: "devPhone"     as AddonKey, label: "Install Dev Phone",          description: "Browser soft phone for SMS + voice" },
 ];
@@ -95,7 +91,18 @@ export function buildSetupScreen(
   body.add(confirmSelect);
 
   checklist.onConfirm = (checkedKeys) => {
-    const addons = { ...current.addons, voiceInput: false } as Record<AddonKey, boolean>;
+    // Skills, Docs MCP, and the web-UI MCP are always-on now (no toggle) —
+    // they're wired automatically when relevant. Only localGemma and
+    // devPhone are user choices. executeMcp self-gates on creds at wire
+    // time, so it's kept off in config.
+    const addons: Record<AddonKey, boolean> = {
+      ...current.addons,
+      twilioSkills: true,
+      docsMcp: true,
+      llamaUiMcp: true,
+      executeMcp: false,
+      voiceInput: false,
+    };
     for (const item of CONFIG_ITEMS) addons[item.key] = checkedKeys.includes(item.key);
     writeConfig(addons);
     checklist.container.visible = false;

@@ -5,7 +5,6 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { capture, have, openInNewWindow, runStreaming, type LogFn } from "./exec.ts";
-import { addonEnabled } from "./config.ts";
 import { CONFIG_DIR, DOCS_MCP_URL, PI_AGENT_PKG, ROOT, TWILIO_MCP_PKG } from "./constants.ts";
 import { launchPi } from "./pi.ts";
 import { pathNodeVersion, supportsPiNode } from "./node-version.ts";
@@ -112,10 +111,15 @@ async function configureStandardAgent(
     else { err(`Could not install ${spec.label} — see ${spec.docsUrl}`, onLog); onDone(false); return; }
   }
 
-  // 2–4. Wire Skills / Docs MCP / Execute MCP per the user's add-on choices.
-  if (addonEnabled("twilioSkills")) await spec.wireSkills?.(onLog);
-  if (addonEnabled("docsMcp")) await spec.wireDocsMcp?.(onLog);
-  if (addonEnabled("executeMcp")) await spec.wireExecuteMcp?.(mcpCreds, onLog);
+  // 2–4. Wire Skills + Docs MCP always (no auth, no risk). Wire the
+  // Execute MCP only when creds are available (it can call live APIs).
+  // Resolve creds from the passed arg OR the environment (loaded from
+  // .toolkit/.env at startup) so re-running Configure Agent picks up a key
+  // created earlier — not just one created in this same run.
+  const effectiveCreds = mcpCreds || process.env.TWILIO_MCP_CREDS || "";
+  await spec.wireSkills?.(onLog);
+  await spec.wireDocsMcp?.(onLog);
+  if (effectiveCreds) await spec.wireExecuteMcp?.(effectiveCreds, onLog);
 
   // 5. Launch in a new terminal window.
   say("", onLog);
@@ -146,8 +150,8 @@ function configureOpencodeMcpSelection(onLog: LogFn) {
   }
 
   const wanted: Record<string, boolean> = {
-    "twilio-docs": addonEnabled("docsMcp"),
-    "twilio-execute": addonEnabled("executeMcp"),
+    "twilio-docs": true,
+    "twilio-execute": Boolean(process.env.TWILIO_MCP_CREDS),
   };
   const drift = Object.entries(wanted).filter(
     ([name, on]) => (committed.mcp?.[name]?.enabled ?? false) !== on,
