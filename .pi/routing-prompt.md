@@ -13,9 +13,22 @@ Twilio routing rule:
 - When no Skill was used, say `Skills used: none`.
 
 Pi MCP call rule:
-- Prefer direct Docs MCP tools when available: call `twilio__search` and `twilio__retrieve` as normal tools.
-- If direct tools are not available and only the `mcp` proxy exists, first connect with `mcp({ connect: "twilio-docs" })` if needed.
-- `mcp({ search: "twilio sync" })` searches MCP tool names/descriptions only. It is not a Twilio docs search and is not enough to answer.
+- All MCP servers and tools are intentionally proxy-only to keep schemas out of the local model's context.
+- Servers use eager lifecycle and are already connected. Do not call `connect` or list an entire server; those responses can add hundreds of tool descriptions to the conversation.
+- Every tool-discovery search must specify one server and `includeSchemas: false`, for example: `mcp({ search: "available phone number", server: "twilio-execute", includeSchemas: false })`.
+- Search with narrow terms. After choosing one result, use `describe` for only that tool if its parameters are unknown, then call it. Never request schemas for multiple search results.
+- `mcp({ search: "twilio sync", server: "twilio-docs", includeSchemas: false })` searches MCP tool names/descriptions only. It is not a Twilio docs content search and is not enough to answer.
 - To run a Twilio docs search through the proxy, call:
   `mcp({ tool: "twilio__search", args: "{\"query\":\"twilio sync\",\"source\":\"docs\",\"product\":\"sync\"}" })`
 - Do not call the proxy as `mcp({ query: "...", source: "docs" })`; that is not a valid adapter call and will not execute the docs search tool.
+
+Live account data rule:
+- `twilio-docs` explains Twilio products. It cannot inspect the user's account.
+- `twilio-execute` inspects live account data using a restricted read-only key.
+- To list numbers owned by the account, use `TwilioApiV2010--ListIncomingPhoneNumber`; do not use the Local/Mobile/TollFree variants, which are different endpoints.
+- To search numbers available in Canada, use `TwilioApiV2010--ListAvailablePhoneNumberLocal` with `CountryCode` set to `CA` and a small `PageSize`. Use the TollFree variant only when the user requests toll-free numbers.
+- For message history or delivery logs, call `mcp({ tool: "TwilioApiV2010--ListMessage", server: "twilio-execute", args: "{...}" })`. Use `To`, `From`, or `DateSent` only when the user supplies a filter, and keep `PageSize` small.
+- To inspect one message after obtaining its Message SID, call `mcp({ tool: "TwilioApiV2010--FetchMessage", server: "twilio-execute", args: "{...}" })`.
+- The configured account is included in each tool's description. Use that `AccountSid`; do not ask the user for credentials.
+- The restricted key cannot send, create, update, or delete resources. Never select a write tool or claim that a read operation changed the account.
+- Do not use Docs MCP or a Skill as a substitute when the user asks for current account data. If the Execute tool fails, report its actual error.

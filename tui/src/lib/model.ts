@@ -22,8 +22,8 @@ import { fileExecutable } from "./exec.ts";
 
 // Security audit E-11: 4096 was too small — the 56-skill system prompt plus
 // tool-call scaffolding filled it within 2-3 turns ("ran out of context
-// window"). 16384 gave real headroom, and was later doubled to 32768 for
-// longer multi-tool sessions (more Skills lookups, longer tool results)
+// window"). 16384 gave real headroom, 32768 covered ordinary chat, and 49152
+// leaves additional room for API tool schemas and results
 // without running out mid-conversation. Override with CTX_SIZE if needed.
 // Validated to digits only — a malformed value falls back to the default
 // instead of being passed through to the llamafile arg list unchecked.
@@ -36,7 +36,7 @@ function validReasoning(raw: string | undefined): ModelReasoningMode | null {
   return raw === "on" || raw === "auto" ? raw : "off";
 }
 
-export const MODEL_CTX_SIZE = validDigits(process.env.CTX_SIZE, "32768");
+export const MODEL_CTX_SIZE = validDigits(process.env.CTX_SIZE, "49152");
 export const MODEL_REASONING = process.env.MODEL_REASONING
   ? validReasoning(process.env.MODEL_REASONING) ?? "off"
   : modelReasoningMode();
@@ -105,9 +105,8 @@ function baseModelArgs(): string[] {
     "--flash-attn", "on",
     "--cache-type-k", "q4_0",
     "--cache-type-v", "q4_0",
-    // Disable thinking by default. On Pi-class CPUs reasoning can spend a long
-    // time in <think> before producing a useful answer. Override per run with
-    // MODEL_REASONING=on or MODEL_REASONING=auto.
+    // Auto recognizes reasoning output while Pi controls effort separately.
+    // Override per run with MODEL_REASONING=off or MODEL_REASONING=on.
     "--reasoning", MODEL_REASONING,
   ];
   if (existsSync(GGUF_MMPROJ)) args.push("--mmproj", GGUF_MMPROJ);

@@ -6,7 +6,7 @@ import { buildSubmenuScreen } from "./submenu.ts";
 
 function reasoningLabel(mode: ModelReasoningMode): string {
   if (mode === "on") return "Thoughtful";
-  if (mode === "auto") return "Balanced";
+  if (mode === "auto") return "Light";
   return "Fast";
 }
 
@@ -41,7 +41,7 @@ export function buildModelControlsScreen(
       },
       {
         name: `Response style: ${reasoningLabel(opts.reasoningMode)}`,
-        description: opts.reasoningMode === "off" ? "faster replies; Enter switches to Thoughtful" : "more deliberate replies; Enter switches to Fast",
+        description: "Enter cycles through Fast, Light, and Thoughtful",
         onSelect: () => { opts.onToggleReasoning(); return true; },
       },
       {

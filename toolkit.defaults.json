@@ -10,6 +10,6 @@
     "llamaUiMcp": true
   },
   "settings": {
-    "modelReasoning": "off"
+    "modelReasoning": "auto"
   }
 }

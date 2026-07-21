@@ -25,7 +25,9 @@ export function writePiMcpConfig(piDir: string, mcpCreds = ""): void {
       type: "http",
       url: DOCS_MCP_URL,
       lifecycle: "eager",
-      directTools: true,
+      // Keep every MCP schema behind the single proxy tool. Even the two Docs
+      // tools add unnecessary prompt weight when the proxy already routes them.
+      directTools: false,
     },
   };
   if (creds) {
@@ -37,12 +39,14 @@ export function writePiMcpConfig(piDir: string, mcpCreds = ""): void {
       // server actually expose tools (it exposes none by default).
       args: ["-y", TWILIO_MCP_PKG, creds, "--services", EXECUTE_SERVICES],
       lifecycle: "eager",
-      directTools: true,
+      // Execute currently exposes ~200 tools and ~110K tokens of schemas.
+      // Proxy-only mode keeps those schemas out of every model request.
+      directTools: false,
     };
   }
   mkdirSync(piDir, { recursive: true });
   const dest = join(piDir, "mcp.json");
-  writeFileSync(dest, JSON.stringify({ mcpServers: servers }, null, 2) + "\n");
+  writeFileSync(dest, JSON.stringify({ settings: { toolPrefix: "none" }, mcpServers: servers }, null, 2) + "\n");
   // mcp.json now embeds the API secret when Execute is wired — restrict it.
   if (creds) { try { chmodSync(dest, 0o600); } catch { /* best-effort */ } }
 }

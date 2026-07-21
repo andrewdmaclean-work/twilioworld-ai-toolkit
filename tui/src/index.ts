@@ -157,12 +157,14 @@ function headlineText(s: ToolkitStatus | null): string {
 
 function modelReasoningLabel(mode: ModelReasoningMode): string {
   if (mode === "on") return "Thoughtful";
-  if (mode === "auto") return "Balanced";
+  if (mode === "auto") return "Light";
   return "Fast";
 }
 
 function nextModelReasoningMode(mode: ModelReasoningMode): ModelReasoningMode {
-  return mode === "off" ? "on" : "off";
+  if (mode === "off") return "auto";
+  if (mode === "auto") return "on";
+  return "off";
 }
 
 // ── Status rail ──────────────────────────────────────────────────────

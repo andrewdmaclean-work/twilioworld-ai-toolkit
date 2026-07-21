@@ -129,6 +129,7 @@ export async function launchPi(opts: { onLog: LogFn; mcpCreds?: string }): Promi
   const piArgs = [
     "--provider", "llamafile",
     "--model", "gemma4-e2b",
+    "--thinking", "low",
     "--append-system-prompt", PI_ROUTING_PROMPT,
     "--no-skills",
   ];

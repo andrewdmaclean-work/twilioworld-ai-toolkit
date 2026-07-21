@@ -40,13 +40,13 @@ const ALL_ADDONS: AddonKey[] = [
   "llamaUiMcp",
 ];
 
-function validReasoningMode(value: unknown): ModelReasoningMode {
-  return value === "on" || value === "auto" ? value : "off";
+function validReasoningMode(value: unknown, fallback: ModelReasoningMode = "auto"): ModelReasoningMode {
+  return value === "off" || value === "on" || value === "auto" ? value : fallback;
 }
 
 export function readConfig(): ToolkitConfig {
   const allFalse = Object.fromEntries(ALL_ADDONS.map((k) => [k, false])) as Record<AddonKey, boolean>;
-  let modelReasoning: ModelReasoningMode = "off";
+  let modelReasoning: ModelReasoningMode = "auto";
 
   // Build base from tracked defaults (toolkit.defaults.json or legacy).
   // This means new addon keys added to defaults are visible to users whose
@@ -60,7 +60,7 @@ export function readConfig(): ToolkitConfig {
         for (const k of ALL_ADDONS) {
           if (d?.addons?.[k] === true) base[k] = true;
         }
-        modelReasoning = validReasoningMode(d?.settings?.modelReasoning);
+        modelReasoning = validReasoningMode(d?.settings?.modelReasoning, modelReasoning);
       } catch { /* ignore */ }
       break;
     }
@@ -75,7 +75,7 @@ export function readConfig(): ToolkitConfig {
       for (const k of ALL_ADDONS) {
         if (typeof local?.addons?.[k] === "boolean") base[k] = local.addons[k];
       }
-      modelReasoning = validReasoningMode(local?.settings?.modelReasoning ?? modelReasoning);
+      modelReasoning = validReasoningMode(local?.settings?.modelReasoning, modelReasoning);
       return { version: local.version ?? 1, addons: base, settings: { modelReasoning } };
     } catch {
       return { version: 1, addons: base, settings: { modelReasoning } };

@@ -333,8 +333,8 @@ Gemini CLI, JetBrains Junie, and 30+ more.
 ```bash
 ./toolkit                   # choose "Ask Twilio"
 MODEL_SERVER_PORT=8082 ./toolkit  # avoid a local 8080 conflict
-CTX_SIZE=65536 ./toolkit    # even more headroom for long multi-tool sessions
-MODEL_REASONING=on ./toolkit      # enable Gemma thinking; default is off
+CTX_SIZE=65536 ./toolkit          # optional extra headroom beyond the 48K default
+MODEL_REASONING=on ./toolkit      # use deeper thinking instead of the light default
 ```
 
 Powered by [llamafile](https://github.com/mozilla-ai/llamafile) (Mozilla) — a single
@@ -416,16 +416,16 @@ supports a small safe tool surface for toolkit introspection: local status,
 install choices, and local Twilio Skill listing. It does **not** call real
 Twilio APIs from chat; use the restricted Execute MCP in a configured agent for
 read-only account inspection.
-Turn thinking on for a run with `MODEL_REASONING=on ./toolkit`; use
-`MODEL_REASONING=auto` to let the model template decide.
+Light thinking is enabled by default. Use `MODEL_REASONING=off ./toolkit` for
+the fastest responses or `MODEL_REASONING=on ./toolkit` for deeper reasoning.
 
-**Memory footprint:** the model runs with a 32 768-token context window and a
+**Memory footprint:** the model runs with a 49 152-token context window and a
 quantized KV cache (`q4_0`), keeping runtime RAM around **~3-3.5 GB** (the
 quantized KV cache scales with context size, but is small relative to the
 model weights, so doubling the window doesn't double total RAM). That covers
 the full Twilio Skills system prompt plus many turns of conversation comfortably
 (a 4096-token window was tried first and reliably ran out of context within 2-3
-turns once the Skills prompt was included, and even 16 384 got tight in longer multi-tool
+turns once the Skills prompt was included, and even 32 768 got tight in longer multi-tool
 Pi/agent sessions — a security/reliability audit flagged the original issue
 before the event, see "Notes & caveats" below).
 Override the context window with `CTX_SIZE=<n>` if a task needs even more room.

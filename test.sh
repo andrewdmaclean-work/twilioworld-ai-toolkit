@@ -66,7 +66,7 @@ check "opencode.json has execute MCP" grep -q 'twilio-execute' opencode.json
 check "opencode.json has llamafile"   grep -q 'gemma4-e2b' opencode.json
 check "defaults valid JSON"           bash -c 'command -v jq && jq empty toolkit.defaults.json || python3 -c "import json,sys; json.load(open(\"toolkit.defaults.json\"))"'
 check "defaults have Gemma on, no Pi add-on" bash -c 'command -v jq && jq -e ".addons.localGemma and (.addons | has(\"builtInPi\") | not)" toolkit.defaults.json || python3 -c "import json; d=json.load(open(\"toolkit.defaults.json\")); assert d[\"addons\"][\"localGemma\"] and \"builtInPi\" not in d[\"addons\"]"'
-check "defaults disable model reasoning" bash -c 'command -v jq && jq -e ".settings.modelReasoning == \"off\"" toolkit.defaults.json || python3 -c "import json; d=json.load(open(\"toolkit.defaults.json\")); assert d[\"settings\"][\"modelReasoning\"] == \"off\""'
+check "defaults use light model reasoning" bash -c 'command -v jq && jq -e ".settings.modelReasoning == \"auto\"" toolkit.defaults.json || python3 -c "import json; d=json.load(open(\"toolkit.defaults.json\")); assert d[\"settings\"][\"modelReasoning\"] == \"auto\""'
 check "builtInPi removed from config schema" bash -c '! grep -q "builtInPi" tui/src/lib/config.ts'
 check "config persists model reasoning" bash -c '
   grep -q "ModelReasoningMode" tui/src/lib/config.ts &&
@@ -120,7 +120,11 @@ check "opencode drift uses OPENCODE_CONFIG_CONTENT" grep -q 'OPENCODE_CONFIG_CON
 check "pi.ts uses routing prompt"     grep -q 'PI_ROUTING_PROMPT\|routing-prompt' tui/src/lib/pi.ts
 check "pi.ts uses --no-skills"        grep -q '\-\-no-skills' tui/src/lib/pi.ts
 check "pi.ts uses --provider llamafile" grep -q 'llamafile' tui/src/lib/pi.ts
-check "pi-mcp has directTools"        grep -q 'directTools' tui/src/lib/pi-mcp.ts
+check "pi.ts defaults to low thinking" grep -q '"--thinking", "low"' tui/src/lib/pi.ts
+check "pi-mcp keeps all tools behind proxy" bash -c '
+  [ "$(grep -c "directTools: false" tui/src/lib/pi-mcp.ts)" -eq 2 ] &&
+  ! grep -q "directTools: true" tui/src/lib/pi-mcp.ts
+'
 check "pi-mcp has eager lifecycle"    grep -q 'eager' tui/src/lib/pi-mcp.ts
 check "pi-mcp has execute mcp guard"  grep -q 'TWILIO_MCP_CREDS' tui/src/lib/pi-mcp.ts
 check "model.ts has server args"      grep -q 'serverArgs\|--server' tui/src/lib/model.ts
@@ -411,9 +415,9 @@ check "no legacy route purple remains" bash -c '! grep -RIn "C084FC\|3B2A52" tui
 check "no legacy shell scripts remain" bash -c '! ls setup.sh configure-agent.sh start-model.sh toolkit.sh toolkit-tui.sh build-system-prompt.js 2>/dev/null | grep -q .'
 
 echo "── Security audit fixes ──"
-check "E-11 context window raised (model.ts)"      grep -q '"32768"' tui/src/lib/model.ts
-check "E-11 context window raised (pi models.json)" bash -c 'command -v jq && jq -e ".providers.llamafile.models[0].contextWindow == 32768" .pi/models.json || python3 -c "import json; d=json.load(open(\".pi/models.json\")); assert d[\"providers\"][\"llamafile\"][\"models\"][0][\"contextWindow\"] == 32768"'
-check "E-11 context window raised (opencode.json)"  bash -c 'command -v jq && jq -e ".provider.llamafile.models[\"gemma4-e2b\"].limit.context == 32768" opencode.json || python3 -c "import json; d=json.load(open(\"opencode.json\")); assert d[\"provider\"][\"llamafile\"][\"models\"][\"gemma4-e2b\"][\"limit\"][\"context\"] == 32768"'
+check "E-11 context window raised (model.ts)"      grep -q '"49152"' tui/src/lib/model.ts
+check "E-11 context window raised (pi models.json)" bash -c 'command -v jq && jq -e ".providers.llamafile.models[0].contextWindow == 49152" .pi/models.json || python3 -c "import json; d=json.load(open(\".pi/models.json\")); assert d[\"providers\"][\"llamafile\"][\"models\"][0][\"contextWindow\"] == 49152"'
+check "E-11 context window raised (opencode.json)"  bash -c 'command -v jq && jq -e ".provider.llamafile.models[\"gemma4-e2b\"].limit.context == 49152" opencode.json || python3 -c "import json; d=json.load(open(\"opencode.json\")); assert d[\"provider\"][\"llamafile\"][\"models\"][\"gemma4-e2b\"][\"limit\"][\"context\"] == 49152"'
 check "E-2/M-3 curl downloads resume + bound redirects" bash -c 'grep -q "curlDownloadArgs" tui/src/lib/model-install.ts && grep -q "\-\-max-redirs" tui/src/lib/model-install.ts && grep -q "\"-C\", \"-\"" tui/src/lib/model-install.ts'
 check "curl progress is rendered by toolkit" bash -c '
   grep -q "\-\-no-progress-meter" tui/src/lib/model-install.ts
@@ -488,6 +492,11 @@ check "pi mcp template inert"         bash -c 'command -v jq && jq -e ".mcpServe
 check "pi models.json valid JSON"     bash -c 'command -v jq && jq empty .pi/models.json || python3 -c "import json; json.load(open(\".pi/models.json\"))"'
 check "pi local model configured"     bash -c 'command -v jq && jq -e '"'"'.providers.llamafile.models[0].id == "gemma4-e2b"'"'"' .pi/models.json || python3 -c "import json; d=json.load(open(\".pi/models.json\")); assert d[\"providers\"][\"llamafile\"][\"models\"][0][\"id\"] == \"gemma4-e2b\""'
 check "routing prompt present"        grep -q 'Do not answer Twilio' .pi/routing-prompt.md
+check "routing prompt bounds MCP discovery context" bash -c '
+  grep -q "includeSchemas: false" .pi/routing-prompt.md &&
+  grep -q "Do not call.*connect" .pi/routing-prompt.md &&
+  grep -q "ListIncomingPhoneNumber" .pi/routing-prompt.md
+'
 
 if [[ "${1:-}" != "--no-net" ]]; then
   echo "── Network ──"
