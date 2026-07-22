@@ -27,6 +27,7 @@ export interface ToolkitConfig {
   addons: Record<AddonKey, boolean>;
   settings: {
     modelReasoning: ModelReasoningMode;
+    localModelSlug?: string;
   };
 }
 
@@ -47,6 +48,7 @@ function validReasoningMode(value: unknown, fallback: ModelReasoningMode = "auto
 export function readConfig(): ToolkitConfig {
   const allFalse = Object.fromEntries(ALL_ADDONS.map((k) => [k, false])) as Record<AddonKey, boolean>;
   let modelReasoning: ModelReasoningMode = "auto";
+  let localModelSlug: string | undefined;
 
   // Build base from tracked defaults (toolkit.defaults.json or legacy).
   // This means new addon keys added to defaults are visible to users whose
@@ -61,6 +63,7 @@ export function readConfig(): ToolkitConfig {
           if (d?.addons?.[k] === true) base[k] = true;
         }
         modelReasoning = validReasoningMode(d?.settings?.modelReasoning, modelReasoning);
+        if (typeof d?.settings?.localModelSlug === "string") localModelSlug = d.settings.localModelSlug;
       } catch { /* ignore */ }
       break;
     }
@@ -76,13 +79,14 @@ export function readConfig(): ToolkitConfig {
         if (typeof local?.addons?.[k] === "boolean") base[k] = local.addons[k];
       }
       modelReasoning = validReasoningMode(local?.settings?.modelReasoning, modelReasoning);
-      return { version: local.version ?? 1, addons: base, settings: { modelReasoning } };
+      if (typeof local?.settings?.localModelSlug === "string") localModelSlug = local.settings.localModelSlug;
+      return { version: local.version ?? 1, addons: base, settings: { modelReasoning, localModelSlug } };
     } catch {
-      return { version: 1, addons: base, settings: { modelReasoning } };
+      return { version: 1, addons: base, settings: { modelReasoning, localModelSlug } };
     }
   }
 
-  return { version: 1, addons: base, settings: { modelReasoning } };
+  return { version: 1, addons: base, settings: { modelReasoning, localModelSlug } };
 }
 
 export function addonEnabled(key: AddonKey): boolean {
@@ -105,4 +109,9 @@ export function modelReasoningMode(): ModelReasoningMode {
 export function setModelReasoningMode(mode: ModelReasoningMode): void {
   const config = readConfig();
   writeConfig(config.addons, { ...config.settings, modelReasoning: validReasoningMode(mode) });
+}
+
+export function setLocalModelSlug(slug: string): void {
+  const config = readConfig();
+  writeConfig(config.addons, { ...config.settings, localModelSlug: slug });
 }
