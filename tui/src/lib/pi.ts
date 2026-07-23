@@ -8,8 +8,6 @@ import { join } from "path";
 import { capture, fileExecutable, have, openInNewWindow, runStreaming, startDaemon, type LogFn, type NewWindowResult } from "./exec.ts";
 import { addonEnabled } from "./config.ts";
 import {
-  GGUF_DEST,
-  GGUF_MIN_BYTES,
   LLAMAFILE_DEST,
   MODEL_SERVER_BASE_URL,
   MODEL_SERVER_LOG,
@@ -22,14 +20,16 @@ import {
   ROOT,
   SKILLS_DIR,
 } from "./constants.ts";
+import { getSelectedModel } from "./local-models.ts";
 import { writePiMcpConfig } from "./pi-mcp.ts";
 import { modelStartupStatus, serverArgs, waitForModelServer } from "./model.ts";
 import { statSync } from "fs";
 import { pathNodeVersion, supportsPiNode } from "./node-version.ts";
 
 function localModelReady(): boolean {
-  if (!existsSync(GGUF_DEST)) return false;
-  try { if (statSync(GGUF_DEST).size < GGUF_MIN_BYTES) return false; } catch { return false; }
+  const model = getSelectedModel();
+  if (!existsSync(model.dest)) return false;
+  try { if (statSync(model.dest).size < model.minBytes) return false; } catch { return false; }
   return fileExecutable(LLAMAFILE_DEST);
 }
 

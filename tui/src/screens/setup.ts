@@ -6,8 +6,8 @@ import { type CliRenderer, BoxRenderable, SelectRenderable, SelectRenderableEven
 import { CheckList, type CheckItem } from "../checklist.ts";
 import { writeConfig, readConfig, type AddonKey } from "../lib/config.ts";
 import { capture, have } from "../lib/exec.ts";
-import { LOCAL_MODEL_SIZE_LABEL } from "../lib/constants.ts";
 import { modelReady } from "../lib/model.ts";
+import { getSelectedModel } from "../lib/local-models.ts";
 import { runSetup } from "../lib/setup.ts";
 import { THEME } from "../theme.ts";
 import { SELECT_STYLE, shortcutBar } from "../ui-style.ts";
@@ -38,7 +38,7 @@ function buildAddonItems(): SetupItem[] {
     {
       key: "localGemma" as AddonKey,
       label: doneLabel(localDone, "Local AI model"),
-      description: localDone ? "Downloaded and ready." : `Required for Ask Twilio and Pi (~${LOCAL_MODEL_SIZE_LABEL})`,
+      description: localDone ? "Downloaded and ready." : `Required for Ask Twilio and Pi (~${getSelectedModel().sizeLabel})`,
       done: localDone,
     },
     { key: "__tools", label: "Twilio tools", description: devDone ? "Done." : "Optional local tools.", heading: true },

@@ -15,10 +15,11 @@ function err(msg: string, onLog: LogFn) { onLog(`✗ ${msg}`, "stderr"); }
 function say(msg: string, onLog: LogFn) { onLog(msg, "stdout"); }
 function step(msg: string, onLog: LogFn) { onLog(`\n▶ ${msg}`, "stdout"); }
 
-/** Download the local Gemma model + llamafile runtime used by Ask Twilio. */
+/** Download the local model + llamafile runtime used by Ask Twilio. */
 export async function downloadLocalModel(opts: { onLog: LogFn; onDone: (ok: boolean) => void }): Promise<void> {
   const { onLog, onDone } = opts;
-  const ok = await installLocalModel({ model: getSelectedModel(), onLog, heading: "Local AI model — Gemma 4 E2B via llamafile" });
+  const model = getSelectedModel();
+  const ok = await installLocalModel({ model, onLog, heading: `Local AI model — ${model.name} via llamafile` });
   onDone(ok);
 }
 

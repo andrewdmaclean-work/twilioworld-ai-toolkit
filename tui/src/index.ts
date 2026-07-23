@@ -33,8 +33,9 @@ import { runUninstall, type UninstallKey } from "./lib/uninstall.ts";
 import { buildInvadersScreen } from "./screens/invaders.ts";
 import { modelReasoningMode, setModelReasoningMode, type ModelReasoningMode } from "./lib/config.ts";
 import {
-  LLAMAFILE_DEST, LOCAL_MODEL_SIZE_LABEL, ROOT, MODEL_SERVER_PID, MODEL_SERVER_PORT, MODEL_SERVER_URL, CONFIG_FILE,
+  LLAMAFILE_DEST, ROOT, MODEL_SERVER_PID, MODEL_SERVER_PORT, MODEL_SERVER_URL, CONFIG_FILE,
 } from "./lib/constants.ts";
+import { getSelectedModel } from "./lib/local-models.ts";
 import { MODEL_SERVER_LOG, serverArgs } from "./lib/model.ts";
 import { openUrl, openLlamaWebUi, startMcpProxy, capture, have, startDaemon } from "./lib/exec.ts";
 import { pathNodeVersion, supportsPiNode } from "./lib/node-version.ts";
@@ -144,7 +145,7 @@ function wrapText(text: string, width: number): string {
 
 function nextMove(s: ToolkitStatus | null): string {
   if (!s) return "Loading local status.";
-  if (!s.model.ready) return `Ask Twilio will download the local model (~${LOCAL_MODEL_SIZE_LABEL}) on first use.`;
+  if (!s.model.ready) return `Ask Twilio will download the local model (~${getSelectedModel().sizeLabel}) on first use.`;
   if (!s.twilio.installed) return "Twilio CLI opens/installs from the Twilio CLI menu when you need it.";
   return "Ask Twilio, configure an agent, or open Dev Phone.";
 }
@@ -273,7 +274,7 @@ function detailFor(item: MenuItem | undefined, s: ToolkitStatus | null): string 
         "",
         s?.model.ready
           ? "RESULT\n  Private, local answers grounded in Twilio guidance."
-          : `DOWNLOAD\n  Local model and runtime, approximately ${LOCAL_MODEL_SIZE_LABEL}.`,
+          : `DOWNLOAD\n  Local model and runtime, approximately ${getSelectedModel().sizeLabel}.`,
       ].join("\n");
     case "agent":
       return [
@@ -873,7 +874,7 @@ async function main() {
           id: "chat-download-screen",
           route: "Dashboard / Ask Twilio",
           title: "Ask Twilio needs local AI",
-          subtitle: `The model downloads once and uses approximately ${LOCAL_MODEL_SIZE_LABEL}.`,
+          subtitle: `The model downloads once and uses approximately ${getSelectedModel().sizeLabel}.`,
           bodyTitle: "Set up Ask Twilio",
           options: [
             {

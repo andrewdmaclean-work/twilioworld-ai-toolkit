@@ -16,8 +16,6 @@ import { join } from "path";
 import { captureAsync, fileExecutable, haveAsync } from "./lib/exec.ts";
 import { readConfig } from "./lib/config.ts";
 import {
-  GGUF_DEST,
-  GGUF_MIN_BYTES,
   LLAMAFILE_DEST,
   MODEL_SERVER_URL,
   ROOT,
@@ -26,6 +24,7 @@ import {
   WHISPER_MODEL_DEST,
   WHISPER_MODEL_MIN_BYTES,
 } from "./lib/constants.ts";
+import { getSelectedModel } from "./lib/local-models.ts";
 import { pathNodeVersionAsync, supportsPiNode } from "./lib/node-version.ts";
 
 export { ROOT };
@@ -53,8 +52,9 @@ export function invalidateStatusCache(): void {
 }
 
 function ggufReady(): boolean {
-  if (!existsSync(GGUF_DEST)) return false;
-  try { return statSync(GGUF_DEST).size >= GGUF_MIN_BYTES; } catch { return false; }
+  const model = getSelectedModel();
+  if (!existsSync(model.dest)) return false;
+  try { return statSync(model.dest).size >= model.minBytes; } catch { return false; }
 }
 
 function whisperModelReady(): boolean {

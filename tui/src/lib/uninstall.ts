@@ -7,9 +7,6 @@ import { capture, have, runStreaming, type LogFn } from "./exec.ts";
 import {
   CONFIG_FILE,
   CONFIG_DIR,
-  GGUF_DEST,
-  GGUF_MMPROJ,
-  GGUF_STAGING,
   LLAMAFILE_DEST,
   MODEL_SERVER_LOG,
   MODELS_DIR,
@@ -23,6 +20,7 @@ import {
   WHISPER_MODEL_DEST,
   WHISPER_MODEL_STAGING,
 } from "./constants.ts";
+import { getSelectedModel } from "./local-models.ts";
 
 export type UninstallKey =
   | "devPhone"
@@ -162,10 +160,11 @@ function removeToolkitState(onLog: LogFn): boolean {
 
 function removeModelRuntime(onLog: LogFn): boolean {
   step("Local model and runtimes", onLog);
+  const model = getSelectedModel();
   const paths = [
-    GGUF_DEST,
-    GGUF_MMPROJ,
-    GGUF_STAGING,
+    model.dest,
+    model.staging,
+    ...(model.mmproj ? [model.mmproj] : []),
     WHISPER_MODEL_DEST,
     WHISPER_MODEL_STAGING,
     MODEL_SERVER_LOG,

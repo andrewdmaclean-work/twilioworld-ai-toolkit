@@ -31,10 +31,6 @@ export const PI_AGENT_PKG = "@earendil-works/pi-coding-agent@0.80.3";
 // with a still-valid APE header.
 export const LLAMAFILE_SHA256: string | null = null;
 
-// Official Google Gemma 4 E2B GGUF from Kaggle — no API key required.
-export const GGUF_URL =
-  "https://www.kaggle.com/api/v1/models/google/gemma-4/gguf/gemma-4-e2b-it-qat-q4_0-gguf/2/download";
-
 // ── Paths ────────────────────────────────────────────────────────────
 export const CONFIG_DIR = join(ROOT, ".toolkit");
 export const CONFIG_FILE = join(CONFIG_DIR, "config.json");
@@ -57,13 +53,7 @@ export const PI_ROUTING_PROMPT = join(ROOT, ".pi", "routing-prompt.md");
 
 export const MODELS_DIR = join(ROOT, "models");
 export const TOOLS_DIR = join(ROOT, "tools");
-export const GGUF_DEST = join(MODELS_DIR, "gemma4-e2b.gguf");
-export const GGUF_MMPROJ = join(MODELS_DIR, "gemma4-e2b-mmproj.gguf");
-export const GGUF_STAGING = join(MODELS_DIR, "gemma4-e2b.download");
 export const SYSTEM_PROMPT = join(MODELS_DIR, "system-prompt.txt");
-export const GGUF_MIN_BYTES = 1_500_000_000; // 1.5 GB floor for the main model
-export const LOCAL_MODEL_SIZE_LABEL = "3.3GB";
-export const LOCAL_MODEL_SIZE_BYTES = 3_543_348_429;
 export const LLAMAFILE_SIZE_LABEL = "302MB";
 export const LLAMAFILE_SIZE_BYTES = 302_000_000;
 

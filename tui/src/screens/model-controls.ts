@@ -1,7 +1,8 @@
 import { type CliRenderer, type BoxRenderable } from "@opentui/core";
 import type { ToolkitStatus } from "../status.ts";
 import type { ModelReasoningMode } from "../lib/config.ts";
-import { LOCAL_MODEL_SIZE_LABEL, MODEL_SERVER_PORT } from "../lib/constants.ts";
+import { MODEL_SERVER_PORT } from "../lib/constants.ts";
+import { getSelectedModel } from "../lib/local-models.ts";
 import { buildSubmenuScreen } from "./submenu.ts";
 
 function reasoningLabel(mode: ModelReasoningMode): string {
@@ -51,7 +52,7 @@ export function buildModelControlsScreen(
       },
       {
         name: "Remove downloaded model",
-        description: opts.status?.model.ready ? `free approximately ${LOCAL_MODEL_SIZE_LABEL} of local storage` : "no model files are installed",
+        description: opts.status?.model.ready ? `free approximately ${getSelectedModel().sizeLabel} of local storage` : "no model files are installed",
         onSelect: () => { opts.onRemove(); return false; },
       },
     ],

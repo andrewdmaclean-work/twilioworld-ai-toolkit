@@ -7,9 +7,6 @@ import { capture } from "./exec.ts";
 import { modelReasoningMode, type ModelReasoningMode } from "./config.ts";
 import { writeWebUiConfig } from "./webui-config.ts";
 import {
-  GGUF_DEST,
-  GGUF_MIN_BYTES,
-  GGUF_MMPROJ,
   LLAMAFILE_DEST,
   MODEL_SERVER_BASE_URL,
   MODEL_SERVER_LOG,
@@ -17,6 +14,7 @@ import {
   MODEL_SERVER_URL,
   WEBUI_CONFIG_FILE,
 } from "./constants.ts";
+import { getSelectedModel } from "./local-models.ts";
 import { statSync } from "fs";
 import { fileExecutable } from "./exec.ts";
 
@@ -46,9 +44,10 @@ export { LLAMAFILE_DEST };
 
 export function modelReady(): { runtime: boolean; weights: boolean } {
   const runtime = fileExecutable(LLAMAFILE_DEST);
+  const model = getSelectedModel();
   let weights = false;
-  if (existsSync(GGUF_DEST)) {
-    try { weights = statSync(GGUF_DEST).size >= GGUF_MIN_BYTES; } catch { /* ignore */ }
+  if (existsSync(model.dest)) {
+    try { weights = statSync(model.dest).size >= model.minBytes; } catch { /* ignore */ }
   }
   return { runtime, weights };
 }
@@ -98,8 +97,9 @@ export async function waitForModelServer(opts: {
 }
 
 function baseModelArgs(): string[] {
+  const model = getSelectedModel();
   const args = [
-    "-m", GGUF_DEST,
+    "-m", model.dest,
     "--ctx-size", MODEL_CTX_SIZE,
     "--parallel", "1",
     "--flash-attn", "on",
@@ -109,7 +109,7 @@ function baseModelArgs(): string[] {
     // Override per run with MODEL_REASONING=off or MODEL_REASONING=on.
     "--reasoning", MODEL_REASONING,
   ];
-  if (existsSync(GGUF_MMPROJ)) args.push("--mmproj", GGUF_MMPROJ);
+  if (model.mmproj && existsSync(model.mmproj)) args.push("--mmproj", model.mmproj);
   return args;
 }
 
