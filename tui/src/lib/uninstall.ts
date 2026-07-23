@@ -164,7 +164,6 @@ function removeModelRuntime(onLog: LogFn): boolean {
   const paths = [
     model.dest,
     model.staging,
-    ...(model.mmproj ? [model.mmproj] : []),
     WHISPER_MODEL_DEST,
     WHISPER_MODEL_STAGING,
     MODEL_SERVER_LOG,

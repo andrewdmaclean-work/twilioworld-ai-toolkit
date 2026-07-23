@@ -109,7 +109,6 @@ function baseModelArgs(): string[] {
     // Override per run with MODEL_REASONING=off or MODEL_REASONING=on.
     "--reasoning", MODEL_REASONING,
   ];
-  if (model.mmproj && existsSync(model.mmproj)) args.push("--mmproj", model.mmproj);
   return args;
 }
 

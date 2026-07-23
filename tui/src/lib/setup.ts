@@ -116,7 +116,7 @@ export async function runSetup(opts: {
   if (!addonEnabled("localGemma")) {
     warn("Local Gemma not selected — skipping", onLog);
   } else {
-    const modelOk = await installLocalModel({ model: getSelectedModel(), onLog, keepArchiveNotice: true });
+    const modelOk = await installLocalModel({ model: getSelectedModel(), onLog });
     if (!modelOk) { onDone(false); return; }
   }
   stepDone("[4/6] Local AI model — Gemma 4 E2B via llamafile", onLog);

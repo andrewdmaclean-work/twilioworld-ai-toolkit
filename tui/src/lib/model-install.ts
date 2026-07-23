@@ -7,15 +7,12 @@ import {
   closeSync,
   existsSync,
   mkdirSync,
-  mkdtempSync,
   openSync,
-  readdirSync,
   readSync,
   renameSync,
   rmSync,
   statSync,
 } from "fs";
-import { join } from "path";
 import { twilioFactAt } from "./twilio-facts.ts";
 import { capture, fileExecutable, runStreaming, type LogFn } from "./exec.ts";
 import {
@@ -41,14 +38,6 @@ function sizeLabel(bytes: number): string {
   return `${(bytes / 1_073_741_824).toFixed(2)} GB`;
 }
 
-function elapsedLabel(startedAt: number): string {
-  const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const rest = seconds % 60;
-  return `${minutes}m ${rest}s`;
-}
-
 function startProgressLogger(
   dest: string,
   totalBytes: number,
@@ -69,16 +58,6 @@ function startProgressLogger(
       // File may not exist yet.
     }
   }, intervalMs);
-}
-
-function startExtractionLogger(onLog: LogFn): ReturnType<typeof setInterval> {
-  const startedAt = Date.now();
-  let tick = 0;
-  return setInterval(() => {
-    onLog(`   extracting… still working (${elapsedLabel(startedAt)} elapsed)`, "stdout");
-    if (tick % 3 === 0) onLog(`   Twilio AI tip: ${twilioFactAt(tick / 3)}`, "stdout");
-    tick++;
-  }, 5000);
 }
 
 // Bound redirects and resume partial downloads.
@@ -129,29 +108,17 @@ function freeKb(): number {
   }
 }
 
-function findGgufs(dir: string): string[] {
-  const found: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) found.push(...findGgufs(full));
-    else if (entry.isFile() && entry.name.endsWith(".gguf")) found.push(full);
-  }
-  return found;
-}
-
 export async function installLocalModel(opts: {
   model: LocalModel;
   onLog: LogFn;
   heading?: string;
-  keepArchiveNotice?: boolean;
 }): Promise<boolean> {
-  const { model, onLog, heading, keepArchiveNotice = false } = opts;
+  const { model, onLog, heading } = opts;
   if (heading) step(heading, onLog);
 
   if (runtimeOk() && ggufSizeOk(model)) {
     ok("llamafile runtime already present", onLog);
     ok("Model weights already present", onLog);
-    if (model.mmproj && existsSync(model.mmproj)) ok("mmproj (multimodal) already present", onLog);
     return true;
   }
 
@@ -201,41 +168,11 @@ export async function installLocalModel(opts: {
       }
     } else {
       const sz = statSync(model.staging).size;
-      ok(`Archive already present (${(sz / 1_073_741_824).toFixed(1)}GB) — skipping download`, onLog);
+      ok(`Partial download present (${(sz / 1_073_741_824).toFixed(1)}GB) — resuming`, onLog);
     }
 
-    if (model.isArchive) {
-      say("   Extracting… this can take a few minutes on a Pi-class machine.", onLog);
-      const extractTmp = mkdtempSync(join(MODELS_DIR, "extract-"));
-      const extractProgress = startExtractionLogger(onLog);
-      const tarRes = await runStreaming("tar", ["-xf", model.staging, "-C", extractTmp], { cwd: ROOT, onLog });
-      clearInterval(extractProgress);
-      if (!tarRes.ok) {
-        err("Extraction failed", onLog);
-        return false;
-      }
-
-      const allGgufs = findGgufs(extractTmp);
-      const mmproj = allGgufs.find((f) => f.includes("mmproj"));
-      const mains = allGgufs.filter((f) => !f.includes("mmproj"));
-      const mainGguf = mains.sort((a, b) => statSync(b).size - statSync(a).size)[0];
-      if (!mainGguf) {
-        err("No main model GGUF found in archive. Left everything in place:", onLog);
-        err(`  Archive:   ${model.staging}`, onLog);
-        err(`  Extracted: ${extractTmp}`, onLog);
-        return false;
-      }
-
-      renameSync(mainGguf, model.dest);
-      if (mmproj && model.mmproj) renameSync(mmproj, model.mmproj);
-      rmSync(extractTmp, { recursive: true, force: true });
-      ok(`Model ready (${(statSync(model.dest).size / 1_073_741_824).toFixed(1)}GB)`, onLog);
-      if (keepArchiveNotice) ok(`Archive kept at ${model.staging} — delete it to reclaim ~${model.sizeLabel}`, onLog);
-    } else {
-      // raw GGUF — just move staging to dest
-      renameSync(model.staging, model.dest);
-      ok(`Model ready (${(statSync(model.dest).size / 1_073_741_824).toFixed(1)}GB)`, onLog);
-    }
+    renameSync(model.staging, model.dest);
+    ok(`Model ready (${(statSync(model.dest).size / 1_073_741_824).toFixed(1)}GB)`, onLog);
   } else {
     ok("Model weights already present", onLog);
   }
