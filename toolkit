@@ -76,7 +76,7 @@ run_doctor() {
   fi
 
   doctor_info "llamafile runtime" test -x "$ROOT/tools/llamafile"
-  doctor_info "local model file" test -f "$ROOT/models/gemma4-e2b.gguf"
+  doctor_info "local model file" bash -c "ls '$ROOT/models/'*.gguf >/dev/null 2>&1"
   doctor_info "toolkit-local Twilio CLI" test -x "$NPM_PREFIX/bin/twilio"
   printf 'INFO toolkit Twilio CLI home: %s\n' "$CONFIG_DIR/twilio-cli-home"
 
@@ -90,14 +90,87 @@ run_doctor() {
   return "$fail"
 }
 
+open_in_terminal() {
+  local app="$1"
+  local toolkit_path
+  toolkit_path="$(printf '%q' "$ROOT/toolkit")"
+
+  case "$app" in
+    iTerm)
+      osascript <<APPLESCRIPT
+tell application "iTerm"
+  activate
+  create window with default profile command "$ROOT/toolkit"
+end tell
+APPLESCRIPT
+      ;;
+    Ghostty)
+      open -a Ghostty --args --command="$ROOT/toolkit"
+      ;;
+    Warp)
+      open -a Warp "$ROOT"
+      # Warp doesn't support passing an arbitrary command on open, so just
+      # open it at the repo root and let the user run ./toolkit from there.
+      echo "Warp opened at $ROOT — run ./toolkit to launch."
+      ;;
+    Hyper)
+      open -a Hyper "$ROOT"
+      echo "Hyper opened at $ROOT — run ./toolkit to launch."
+      ;;
+    Alacritty)
+      # Alacritty is not AppleScript-able; launch via open with --command
+      open -a Alacritty --args --command "$ROOT/toolkit"
+      ;;
+    Terminal|*)
+      # Terminal.app via a .command file (most reliable across macOS versions)
+      local script
+      script="$(mktemp "${TMPDIR:-/tmp}/twilioworld-open.XXXXXX.command")"
+      printf '#!/bin/sh\ncd %s\nexec %s\n' "$ROOT" "$ROOT/toolkit" > "$script"
+      chmod +x "$script"
+      open -a Terminal "$script"
+      ;;
+  esac
+}
+
 case "${1:-}" in
   doctor|--doctor)
     run_doctor
     exit $?
     ;;
+  --iterm)
+    open_in_terminal "iTerm"
+    exit 0
+    ;;
+  --ghostty)
+    open_in_terminal "Ghostty"
+    exit 0
+    ;;
+  --warp)
+    open_in_terminal "Warp"
+    exit 0
+    ;;
+  --hyper)
+    open_in_terminal "Hyper"
+    exit 0
+    ;;
+  --alacritty)
+    open_in_terminal "Alacritty"
+    exit 0
+    ;;
+  --terminal)
+    open_in_terminal "Terminal"
+    exit 0
+    ;;
   -h|--help)
-    echo "Usage: ./toolkit [doctor|--doctor]"
-    echo "Run without arguments to launch the TUI dashboard."
+    echo "Usage: ./toolkit [options]"
+    echo "  (no args)    launch the TUI in this terminal"
+    echo "  --iterm      open in a new iTerm2 window"
+    echo "  --ghostty    open in a new Ghostty window"
+    echo "  --warp       open in a new Warp window"
+    echo "  --hyper      open in a new Hyper window"
+    echo "  --alacritty  open in a new Alacritty window"
+    echo "  --terminal   open in a new Terminal.app window"
+    echo "  --doctor     check prerequisites"
     exit 0
     ;;
 esac
